@@ -1,4 +1,4 @@
-.PHONY: train eval test lint prepare-data visualize install
+.PHONY: train eval test lint prepare-data visualize install pipeline-list pipeline-fetch pipeline-clean pipeline-run
 
 install:
 	pip install -e ".[dev]"
@@ -23,6 +23,18 @@ visualize:
 
 test:
 	pytest tests/ -v
+
+pipeline-list:
+	python scripts/pipeline.py list
+
+pipeline-fetch:
+	python scripts/pipeline.py fetch --all --dry-run
+
+pipeline-clean:
+	python scripts/pipeline.py clean --all --dry-run
+
+pipeline-run:
+	python scripts/pipeline.py run --source $(SOURCE)
 
 lint:
 	ruff check ash/ tests/ scripts/

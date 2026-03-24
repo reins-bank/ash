@@ -1,0 +1,39 @@
+name: wikipedia
+version: "1.0"
+description: "English Wikipedia articles — encyclopedic, high-quality long-form text"
+
+source:
+  type: huggingface
+  path: "wikimedia/wikipedia"
+  subset: "20231101.en"
+  split: "train"
+  revision: null
+
+license:
+  name: "CC-BY-SA-3.0"
+  url: "https://creativecommons.org/licenses/by-sa/3.0/"
+  allowed_use: research
+  attribution: "Wikimedia Foundation"
+
+provenance:
+  dedup_status: "inherently unique (one article per title)"
+  pii_scrub: "community-moderated"
+  quality_filter: "none (already curated)"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: false
+  output_dir: "data/raw/wikipedia"
+
+cleaning:
+  output_dir: "data/clean/wikipedia"
+  steps:
+    - name: strip_html
+    - name: normalize_whitespace
+    - name: min_length_filter
+      params:
+        min_chars: 200
+    - name: tokenize
+      params:
+        tokenizer: gpt2

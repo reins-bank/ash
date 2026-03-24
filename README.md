@@ -200,6 +200,101 @@ This produces a [layers x tokens] heatmap showing how each token's epistemic sta
 
 ---
 
+## Data Pipeline
+
+The data pipeline framework manages training data sources declaratively via YAML. Each source defines its location, licensing/provenance metadata, fetch settings, and cleaning/standardization steps.
+
+### Source definitions
+
+Source YAMLs live in `data_sources/`. Shipped examples:
+
+| Source | Type | Description |
+|---|---|---|
+| `fineweb` | HuggingFace | Curated web text from CommonCrawl |
+| `the_stack_v2` | HuggingFace | Permissively-licensed source code |
+| `wikipedia` | HuggingFace | English Wikipedia articles |
+| `arxiv` | HuggingFace | ArXiv scientific papers |
+
+### YAML schema
+
+```yaml
+name: my_source
+description: "What this source contains"
+
+source:
+  type: huggingface   # huggingface | url | local
+  path: "org/dataset"
+  subset: "default"   # optional
+  split: "train"
+
+license:
+  name: "MIT"
+  allowed_use: research  # research | commercial | unknown
+
+provenance:
+  dedup_status: "document-level"
+  pii_scrub: "none"
+  quality_filter: "custom v1"
+
+fetch:
+  max_documents: null   # null = all
+  streaming: true
+  output_dir: "data/raw/my_source"
+
+cleaning:
+  output_dir: "data/clean/my_source"
+  steps:
+    - name: strip_html
+    - name: normalize_whitespace
+    - name: min_length_filter
+      params:
+        min_chars: 100
+    - name: dedup_exact
+    - name: tokenize
+      params:
+        tokenizer: gpt2
+```
+
+Sources with `allowed_use: unknown` are flagged for quarantine per the [TRAINING.md](TRAINING.md) sourcing policy.
+
+### CLI usage
+
+```bash
+# List all defined sources
+python scripts/pipeline.py list
+
+# Fetch a single source (dry run)
+python scripts/pipeline.py fetch --source fineweb --dry-run
+
+# Fetch all sources
+python scripts/pipeline.py fetch --all
+
+# Clean/standardize a source
+python scripts/pipeline.py clean --source wikipedia
+
+# Run full pipeline (fetch + clean) for all sources
+python scripts/pipeline.py run --all
+
+# Dry run the full pipeline
+python scripts/pipeline.py run --all --dry-run
+
+# Custom sources directory and output base
+python scripts/pipeline.py run --all --sources-dir my_sources/ --base-dir /data/
+```
+
+Available cleaning steps: `strip_html`, `strip_latex_commands`, `normalize_whitespace`, `min_length_filter`, `max_length_filter`, `dedup_exact`, `tokenize`.
+
+### Makefile shortcuts
+
+```bash
+make pipeline-list     # List sources
+make pipeline-fetch    # Dry-run fetch all
+make pipeline-clean    # Dry-run clean all
+make pipeline-run SOURCE=fineweb  # Run pipeline for one source
+```
+
+---
+
 ## Running Tests
 
 ```bash
@@ -240,12 +335,18 @@ ash/
 │   │   ├── scheduler.py       # LR schedule + CER curriculum
 │   │   ├── checkpoint.py      # Save/load
 │   │   └── trainer.py         # Main training loop
+│   ├── pipeline/
+│   │   ├── source.py          # YAML source loader and validator
+│   │   ├── fetch.py           # Fetch from HuggingFace, URL, or local
+│   │   ├── clean.py           # Cleaning step registry and executor
+│   │   └── runner.py          # Pipeline orchestrator
 │   ├── data/
 │   │   ├── tokenizer.py       # tiktoken GPT-2 wrapper
 │   │   └── dataset.py         # Memmap dataset
 │   └── eval/
 │       ├── cer_battery.py     # CER test suite runner
 │       └── t1-t8 tests        # Individual CER evaluation tests
+├── data_sources/              # YAML data source definitions (pipeline)
 ├── configs/                   # YAML training configs
 ├── scripts/                   # Entry points (train, eval, prepare_data, visualize)
 ├── tests/                     # 42 unit and integration tests

@@ -1,0 +1,42 @@
+name: the_stack_v2
+version: "1.0"
+description: "Permissively-licensed source code from Software Heritage archive"
+
+source:
+  type: huggingface
+  path: "bigcode/the-stack-v2"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "Multiple (per-file)"
+  url: "https://huggingface.co/datasets/bigcode/the-stack-v2"
+  allowed_use: research
+  attribution: "BigCode / Software Heritage"
+
+provenance:
+  dedup_status: "near-dedup across files"
+  pii_scrub: "StarCoder PII pipeline"
+  quality_filter: "permissive-license filter"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/the_stack_v2"
+
+cleaning:
+  output_dir: "data/clean/the_stack_v2"
+  steps:
+    - name: normalize_whitespace
+    - name: min_length_filter
+      params:
+        min_chars: 50
+    - name: max_length_filter
+      params:
+        max_chars: 1000000
+    - name: dedup_exact
+    - name: tokenize
+      params:
+        tokenizer: gpt2

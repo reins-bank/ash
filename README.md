@@ -4,8 +4,6 @@ Ash is a frontier language model built from scratch, augmented with **Contextual
 
 The full Ash model targets a sparse Mixture-of-Experts architecture (17B active parameters x 128 experts), loosely based on Llama 4 Maverick. **Ashy-Small** is the current proof-of-concept: a GPT-2 scale (124M + 7M CER = 131M params) dense model with all three CER primitives integrated and trainable on a single GPU.
 
-Funded by [Reins Financial, Inc.](mailto:hello@reins.cash)
-
 ---
 
 ## What is CER?

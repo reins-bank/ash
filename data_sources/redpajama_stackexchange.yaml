@@ -1,0 +1,39 @@
+name: redpajama_stackexchange
+version: "1.0"
+description: "Technical Q&A style reasoning text from RedPajama V2 StackExchange subset"
+
+source:
+  type: huggingface
+  path: "togethercomputer/RedPajama-Data-V2"
+  subset: "stackexchange"
+  split: "train"
+  revision: null
+
+license:
+  name: "Mixed (source-dependent)"
+  url: "https://huggingface.co/datasets/togethercomputer/RedPajama-Data-V2"
+  allowed_use: unknown
+  attribution: "Together AI / RedPajama"
+
+provenance:
+  dedup_status: "dataset-level dedup"
+  pii_scrub: "dataset pipeline"
+  quality_filter: "RedPajama quality filters"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/redpajama_stackexchange"
+
+cleaning:
+  output_dir: "data/clean/redpajama_stackexchange"
+  steps:
+    - name: normalize_whitespace
+    - name: min_length_filter
+      params:
+        min_chars: 150
+    - name: dedup_exact
+    - name: tokenize
+      params:
+        tokenizer: gpt2

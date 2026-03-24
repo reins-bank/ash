@@ -1,0 +1,39 @@
+name: ultrachat_200k
+version: "1.0"
+description: "Instruction/dialogue corpus to seed conversational behavior (keep small in pretrain mix)"
+
+source:
+  type: huggingface
+  path: "HuggingFaceH4/ultrachat_200k"
+  subset: "default"
+  split: "train_sft"
+  revision: null
+
+license:
+  name: "OpenRAIL / mixed"
+  url: "https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k"
+  allowed_use: unknown
+  attribution: "HuggingFaceH4"
+
+provenance:
+  dedup_status: "conversation-level dedup"
+  pii_scrub: "dataset-level filtering"
+  quality_filter: "instruction tuning curation"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/ultrachat_200k"
+
+cleaning:
+  output_dir: "data/clean/ultrachat_200k"
+  steps:
+    - name: normalize_whitespace
+    - name: min_length_filter
+      params:
+        min_chars: 60
+    - name: dedup_exact
+    - name: tokenize
+      params:
+        tokenizer: gpt2

@@ -1,0 +1,40 @@
+name: fineweb_edu
+version: "1.0"
+description: "Education-focused high-quality web text; strong long-form reasoning signal"
+
+source:
+  type: huggingface
+  path: "HuggingFaceFW/fineweb-edu"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "ODC-By-1.0"
+  url: "https://opendatacommons.org/licenses/by/1-0/"
+  allowed_use: research
+  attribution: "HuggingFace FineWeb-Edu team"
+
+provenance:
+  dedup_status: "document-level dedup"
+  pii_scrub: "pipeline-level regex + filtering"
+  quality_filter: "educational quality scoring"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/fineweb_edu"
+
+cleaning:
+  output_dir: "data/clean/fineweb_edu"
+  steps:
+    - name: strip_html
+    - name: normalize_whitespace
+    - name: min_length_filter
+      params:
+        min_chars: 200
+    - name: dedup_exact
+    - name: tokenize
+      params:
+        tokenizer: gpt2

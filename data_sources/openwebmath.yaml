@@ -1,0 +1,41 @@
+name: openwebmath
+version: "1.0"
+description: "Math-heavy web corpus for quantitative and symbolic reasoning"
+
+source:
+  type: huggingface
+  path: "open-web-math/open-web-math"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "ODC-By-1.0"
+  url: "https://opendatacommons.org/licenses/by/1-0/"
+  allowed_use: research
+  attribution: "OpenWebMath contributors"
+
+provenance:
+  dedup_status: "dataset-level dedup"
+  pii_scrub: "pipeline-level cleaning"
+  quality_filter: "math-content scoring"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/openwebmath"
+
+cleaning:
+  output_dir: "data/clean/openwebmath"
+  steps:
+    - name: strip_html
+    - name: strip_latex_commands
+    - name: normalize_whitespace
+    - name: min_length_filter
+      params:
+        min_chars: 120
+    - name: dedup_exact
+    - name: tokenize
+      params:
+        tokenizer: gpt2

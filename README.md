@@ -211,9 +211,15 @@ Source YAMLs live in `data_sources/`. Shipped examples:
 | Source | Type | Description |
 |---|---|---|
 | `fineweb` | HuggingFace | Curated web text from CommonCrawl |
+| `fineweb_edu` | HuggingFace | Higher-quality educational web text |
+| `redpajama_commoncrawl` | HuggingFace | Large general web shard (CC) |
 | `the_stack_v2` | HuggingFace | Permissively-licensed source code |
+| `redpajama_stackexchange` | HuggingFace | Technical Q&A style reasoning text |
+| `redpajama_book` | HuggingFace | Long-form book-like corpus |
 | `wikipedia` | HuggingFace | English Wikipedia articles |
 | `arxiv` | HuggingFace | ArXiv scientific papers |
+| `openwebmath` | HuggingFace | Math-heavy corpus for quantitative reasoning |
+| `ultrachat_200k` | HuggingFace | Instruction/dialogue data (use low %) |
 
 ### YAML schema
 

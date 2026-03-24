@@ -1,0 +1,39 @@
+name: redpajama_book
+version: "1.0"
+description: "Long-form book-like text from RedPajama V2 book subset"
+
+source:
+  type: huggingface
+  path: "togethercomputer/RedPajama-Data-V2"
+  subset: "book"
+  split: "train"
+  revision: null
+
+license:
+  name: "Mixed (source-dependent)"
+  url: "https://huggingface.co/datasets/togethercomputer/RedPajama-Data-V2"
+  allowed_use: unknown
+  attribution: "Together AI / RedPajama"
+
+provenance:
+  dedup_status: "dataset-level dedup"
+  pii_scrub: "dataset pipeline"
+  quality_filter: "RedPajama quality filters"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/redpajama_book"
+
+cleaning:
+  output_dir: "data/clean/redpajama_book"
+  steps:
+    - name: normalize_whitespace
+    - name: min_length_filter
+      params:
+        min_chars: 300
+    - name: dedup_exact
+    - name: tokenize
+      params:
+        tokenizer: gpt2

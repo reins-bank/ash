@@ -1,0 +1,40 @@
+name: redpajama_commoncrawl
+version: "1.0"
+description: "Large general web-text shard from RedPajama V2 (Common Crawl)"
+
+source:
+  type: huggingface
+  path: "togethercomputer/RedPajama-Data-V2"
+  subset: "common_crawl"
+  split: "train"
+  revision: null
+
+license:
+  name: "Mixed (per-document)"
+  url: "https://huggingface.co/datasets/togethercomputer/RedPajama-Data-V2"
+  allowed_use: unknown
+  attribution: "Together AI / RedPajama"
+
+provenance:
+  dedup_status: "dataset-level dedup"
+  pii_scrub: "dataset pipeline"
+  quality_filter: "RedPajama quality filters"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/redpajama_commoncrawl"
+
+cleaning:
+  output_dir: "data/clean/redpajama_commoncrawl"
+  steps:
+    - name: strip_html
+    - name: normalize_whitespace
+    - name: min_length_filter
+      params:
+        min_chars: 120
+    - name: dedup_exact
+    - name: tokenize
+      params:
+        tokenizer: gpt2

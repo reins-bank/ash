@@ -1,0 +1,9 @@
+# Ashy-Small ablation baseline: vanilla GPT-2, no CER.
+# Everything identical to ashy_small.yaml except CER is disabled.
+
+model:
+  cer:
+    enabled: false
+
+training:
+  wandb_project: ashy-small-baseline

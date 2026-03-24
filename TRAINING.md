@@ -75,6 +75,42 @@ Additions:
 - Keep a **high-quality reserve set** (~2-5%) that is never used in training, only for periodic deep eval.
 - Enforce document-level and near-duplicate dedup across sources.
 
+### 4.1 Corpora we can use now (to reduce internal data burden)
+
+The goal is to avoid building everything from scratch. Start from mature public corpora, then layer your own curation.
+
+#### Immediate bootstrap set (usable now)
+
+- **FineWeb / FineWeb-Edu** (high-quality web text)
+- **Dolma** (large curated text mixture)
+- **Wikipedia + Wikibooks + Wikisource** dumps (encyclopedic + long-form)
+- **The Stack v2 / StarCoderData** (code)
+- **ArXiv + PubMed Open Access subsets** (scientific)
+- **OpenWebMath / Proof-Pile-style math corpora** (math reasoning)
+- **OpenAssistant / UltraChat-style instruction corpora** (for instruction flavor; keep low % in pretrain)
+
+#### Datasets to avoid or quarantine by default
+
+- Any corpus with unclear redistribution/training rights
+- Legacy mixed corpora with known legal ambiguity (e.g., unlicensed book dumps)
+- Data with weak provenance metadata
+
+### 4.2 Practical sourcing policy (recommended)
+
+For each dataset, record in a manifest:
+- source URL / commit or snapshot ID
+- license
+- allowed use (research/commercial/unknown)
+- dedup status
+- quality filter version
+- PII scrub version
+
+Then enforce:
+- only "allowed" data enters main pretrain
+- "unknown" data goes to quarantine until reviewed
+
+This reduces legal risk and prevents accidental contamination of the main run.
+
 ---
 
 ## 5) CER-aware curriculum mapped to token budget
@@ -100,7 +136,7 @@ Example for a 500B-token run:
 
 Current default config processes approximately:
 
-`tokens = max_steps * batch_size * grad_accum * block_size`
+`tokens = max_steps * batch_size * gradient_accumulation_steps * block_size`
 
 With defaults (100k, 12, 40, 1024):
 - **~49.15B tokens processed**

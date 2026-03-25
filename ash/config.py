@@ -111,6 +111,7 @@ class TrainingConfig:
     device: str = "cuda"
     compile: bool = True
     dtype: str = "bfloat16"
+    gradient_checkpointing: bool = False
 
     # Modal
     modal: ModalConfig = field(default_factory=ModalConfig)

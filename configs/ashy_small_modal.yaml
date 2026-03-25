@@ -11,6 +11,8 @@ model:
     enabled: true
 
 training:
+  gradient_checkpointing: true
+  compile: false
   wandb_project: ashy-small
   wandb_enabled: true
   modal:

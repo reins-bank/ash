@@ -38,6 +38,11 @@ def run_training(
     print(f"  CER:  {counts['cer']:,} ({counts['cer']/1e6:.1f}M)")
     print(f"  CER enabled: {model_cfg.cer.enabled}")
 
+    # Gradient checkpointing
+    if train_cfg.gradient_checkpointing:
+        model.gradient_checkpointing = True
+        print("Gradient checkpointing enabled")
+
     # Compile
     if train_cfg.compile and device != "cpu":
         print("Compiling model with torch.compile...")

@@ -20,7 +20,7 @@ def run_on_modal(
     app = modal.App("ash-training")
 
     image = (
-        modal.Image.debian_slim(python_version="3.12")
+        modal.Image.debian_slim(python_version="3.14")
         .pip_install(
             "torch>=2.1",
             "tiktoken>=0.5",
@@ -65,7 +65,6 @@ def run_on_modal(
         train_cfg.data_dir = "/data"
         train_cfg.checkpoint_dir = "/checkpoints"
         train_cfg.device = "cuda"
-        train_cfg.compile = True
 
         print(f"[Modal] GPU: {config_dict['training']['modal']['gpu']}")
         run_training(model_cfg, train_cfg, resume_path=resume_path)
@@ -77,6 +76,7 @@ def run_on_modal(
         timeout=train_cfg.modal.timeout,
         volumes={"/data": data_vol, "/checkpoints": ckpt_vol},
         secrets=secrets,
+        serialized=True,
     )(_train_remote)
 
     gpu = train_cfg.modal.gpu

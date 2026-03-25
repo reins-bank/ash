@@ -28,6 +28,9 @@ class GPT(nn.Module):
         # Weight tying
         self.lm_head.weight = self.embeddings.tok_emb.weight
 
+        # Gradient checkpointing (set by trainer before training)
+        self.gradient_checkpointing = False
+
         # Init weights
         self.apply(self._init_weights)
         # Scaled init for residual projections (GPT-2 convention)
@@ -67,7 +70,12 @@ class GPT(nn.Module):
 
         all_aux: list[dict] = []
         for block in self.blocks:
-            x, cr_state, aux = block(x, cr_state)
+            if self.gradient_checkpointing and self.training:
+                x, cr_state, aux = torch.utils.checkpoint.checkpoint(
+                    block, x, cr_state, use_reentrant=False
+                )
+            else:
+                x, cr_state, aux = block(x, cr_state)
             all_aux.append(aux)
 
         x = self.ln_f(x)

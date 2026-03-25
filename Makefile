@@ -1,4 +1,4 @@
-.PHONY: train eval test lint prepare-data visualize install pipeline-list pipeline-fetch pipeline-clean pipeline-run
+.PHONY: train eval test lint prepare-data visualize install pipeline-list pipeline-fetch pipeline-clean pipeline-run modal-train modal-upload-data
 
 install:
 	pip install -e ".[dev]"
@@ -38,3 +38,9 @@ pipeline-run:
 
 lint:
 	ruff check ash/ tests/ scripts/
+
+modal-train:
+	python scripts/train.py --config configs/ashy_small_modal.yaml
+
+modal-upload-data:
+	python -m ash.infra.modal_data --data-dir data/ --volume ash-data

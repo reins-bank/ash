@@ -30,3 +30,5 @@ training:
   wandb_project: ashy-small
   wandb_enabled: true
   dtype: bfloat16
+  modal:
+    enabled: false

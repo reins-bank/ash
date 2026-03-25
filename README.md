@@ -84,6 +84,9 @@ source .venv/bin/activate
 
 # Install
 pip install -e ".[dev]"
+
+# Optional: install Modal for cloud GPU training
+pip install -e ".[modal]"
 ```
 
 Requires Python 3.10+ and PyTorch 2.1+.
@@ -152,6 +155,72 @@ Checkpoints are saved to `checkpoints/` and include model weights, optimizer sta
 
 ```bash
 python scripts/train.py --config configs/ashy_small.yaml --resume checkpoints/ckpt_best.pt
+```
+
+### 5. Training on Modal (cloud GPU)
+
+For larger training runs, you can hand off to [Modal](https://modal.com)'s serverless GPUs. Training launches from your terminal and logs stream back in real time.
+
+**One-time setup:**
+
+```bash
+# Install Modal
+pip install -e ".[modal]"
+
+# Authenticate with Modal
+modal setup
+
+# (Optional) Set up W&B logging on Modal
+modal secret create wandb-secret WANDB_API_KEY=<your-key>
+
+# Upload pre-tokenized data to a Modal Volume
+# Works with both legacy flat layout (data/train.bin) and
+# pipeline output (data/clean/<source>/tokens.bin)
+make modal-upload-data
+```
+
+**Run training on Modal:**
+
+```bash
+# Uses configs/ashy_small_modal.yaml (A10G GPU, 2hr timeout)
+make modal-train
+
+# Or directly:
+python scripts/train.py --config configs/ashy_small_modal.yaml
+```
+
+This runs the exact same training pipeline on a remote GPU. Checkpoints are saved to a persistent Modal Volume (`ash-checkpoints`).
+
+**Configuring GPU and timeout:**
+
+The `modal` section in any YAML config controls the handoff:
+
+```yaml
+training:
+  modal:
+    enabled: true       # set to false to run locally
+    gpu: "A10G"         # GPU tier: "T4", "A10G", "A100", "H100"
+    timeout: 7200       # max runtime in seconds
+    data_volume: "ash-data"           # Modal Volume for training data
+    checkpoint_volume: "ash-checkpoints"  # Modal Volume for checkpoints
+    wandb_secret: "wandb-secret"      # Modal Secret name for W&B API key
+```
+
+GPU tiers in order of cost/performance: `T4` (cheapest, fine for GPT-2 scale) < `A10G` < `A100` < `H100`.
+
+**Using pipeline data with Modal:**
+
+After running the data pipeline locally, upload the tokenized output to Modal:
+
+```bash
+# Run pipeline to fetch + clean + tokenize a source
+python scripts/pipeline.py run --source wikipedia
+
+# Upload all .bin files (preserves directory structure)
+make modal-upload-data
+
+# Set data_dir in your config to match the volume path, e.g.:
+#   data_dir: "clean/wikipedia"  (maps to /data/clean/wikipedia/ on the volume)
 ```
 
 ---
@@ -324,7 +393,7 @@ Tests cover: output shapes, value ranges, gradient flow, causal masking, paramet
 ```
 ash/
 ├── ash/
-│   ├── config.py              # ModelConfig, CERConfig, TrainingConfig
+│   ├── config.py              # ModelConfig, CERConfig, TrainingConfig, ModalConfig
 │   ├── model/
 │   │   ├── embeddings.py      # Token + positional embeddings
 │   │   ├── attention.py       # Causal self-attention + ASH integration
@@ -340,7 +409,11 @@ ash/
 │   │   ├── optimizer.py       # AdamW configuration
 │   │   ├── scheduler.py       # LR schedule + CER curriculum
 │   │   ├── checkpoint.py      # Save/load
-│   │   └── trainer.py         # Main training loop
+│   │   ├── trainer.py         # Main training loop
+│   │   └── runner.py          # Training orchestration (local + Modal)
+│   ├── infra/
+│   │   ├── modal_runner.py    # Modal GPU dispatch
+│   │   └── modal_data.py      # Upload data to Modal Volumes
 │   ├── pipeline/
 │   │   ├── source.py          # YAML source loader and validator
 │   │   ├── fetch.py           # Fetch from HuggingFace, URL, or local

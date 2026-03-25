@@ -60,6 +60,18 @@ class ModelConfig:
 
 
 @dataclass
+class ModalConfig:
+    """Modal cloud GPU configuration."""
+
+    enabled: bool = False
+    gpu: str = "A10G"
+    timeout: int = 3600
+    data_volume: str = "ash-data"
+    checkpoint_volume: str = "ash-checkpoints"
+    wandb_secret: str = "wandb-secret"
+
+
+@dataclass
 class TrainingConfig:
     """Training hyperparameters."""
 
@@ -99,6 +111,9 @@ class TrainingConfig:
     device: str = "cuda"
     compile: bool = True
     dtype: str = "bfloat16"
+
+    # Modal
+    modal: ModalConfig = field(default_factory=ModalConfig)
 
 
 def _apply_overrides(dc: object, overrides: dict) -> None:

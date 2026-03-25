@@ -1,0 +1,19 @@
+# Ashy-Small: GPT-2 117M + CER — training on Modal GPU.
+# Inherits all defaults; only overrides for Modal dispatch.
+#
+# One-time setup:
+#   modal setup
+#   modal secret create wandb-secret WANDB_API_KEY=<your-key>
+#   make modal-upload-data  (upload pre-tokenized data to Modal volume)
+
+model:
+  cer:
+    enabled: true
+
+training:
+  wandb_project: ashy-small
+  wandb_enabled: true
+  modal:
+    enabled: true
+    gpu: "A10G"
+    timeout: 7200

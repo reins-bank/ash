@@ -182,14 +182,22 @@ make modal-upload-data
 **Run training on Modal:**
 
 ```bash
-# Uses configs/ashy_small_modal.yaml (A10G GPU, 2hr timeout)
 make modal-train
 
 # Or directly:
 python scripts/train.py --config configs/ashy_small_modal.yaml
 ```
 
-This runs the exact same training pipeline on a remote GPU. Checkpoints are saved to a persistent Modal Volume (`ash-checkpoints`).
+Training dispatches to Modal in the background and returns immediately. Checkpoints are saved to a persistent Modal Volume (`ash-checkpoints`).
+
+**Monitoring a running training job:**
+
+```bash
+make modal-status          # check if still running
+make modal-checkpoints     # list saved checkpoints on the volume
+make modal-download CHECKPOINT=ckpt_best.pt   # download a checkpoint
+make modal-cancel          # stop the run
+```
 
 **Configuring GPU and timeout:**
 
@@ -200,7 +208,7 @@ training:
   modal:
     enabled: true       # set to false to run locally
     gpu: "A10G"         # GPU tier: "T4", "A10G", "A100", "H100"
-    timeout: 7200       # max runtime in seconds
+    timeout: 86400      # cost safety net in seconds (default: 24h)
     data_volume: "ash-data"           # Modal Volume for training data
     checkpoint_volume: "ash-checkpoints"  # Modal Volume for checkpoints
     wandb_secret: "wandb-secret"      # Modal Secret name for W&B API key

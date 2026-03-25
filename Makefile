@@ -1,4 +1,4 @@
-.PHONY: train eval test lint prepare-data visualize install pipeline-list pipeline-fetch pipeline-clean pipeline-run modal-train modal-upload-data
+.PHONY: train eval test lint prepare-data visualize install pipeline-list pipeline-fetch pipeline-clean pipeline-run modal-train modal-upload-data modal-status modal-checkpoints modal-download modal-cancel
 
 install:
 	pip install -e ".[dev]"
@@ -44,3 +44,15 @@ modal-train:
 
 modal-upload-data:
 	python -m ash.infra.modal_data --data-dir data/ --volume ash-data
+
+modal-status:
+	python -m ash.infra.modal_status status
+
+modal-checkpoints:
+	python -m ash.infra.modal_status checkpoints
+
+modal-download:
+	python -m ash.infra.modal_status download $(CHECKPOINT) --out-dir checkpoints/
+
+modal-cancel:
+	python -m ash.infra.modal_status cancel

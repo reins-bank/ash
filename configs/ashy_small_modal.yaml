@@ -11,6 +11,9 @@ model:
     enabled: true
 
 training:
+  data_dir: "data/wikitext"
+  batch_size: 4
+  gradient_accumulation_steps: 120
   gradient_checkpointing: true
   compile: false
   wandb_project: ashy-small
@@ -18,4 +21,3 @@ training:
   modal:
     enabled: true
     gpu: "A10G"
-    timeout: 7200

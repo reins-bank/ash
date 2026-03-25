@@ -65,7 +65,7 @@ class ModalConfig:
 
     enabled: bool = False
     gpu: str = "A10G"
-    timeout: int = 3600
+    timeout: int = 86400  # 24h cost safety net; override in YAML for longer runs
     data_volume: str = "ash-data"
     checkpoint_volume: str = "ash-checkpoints"
     wandb_secret: str = "wandb-secret"

@@ -11,3 +11,4 @@ wandb/
 *.bin
 .ruff_cache/
 .pytest_cache/
+.modal_run.json

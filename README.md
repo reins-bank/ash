@@ -2,7 +2,7 @@
 
 Ash is a frontier language model built from scratch, augmented with **Contextual Epistemic Release (CER)** — a novel architectural framework that gives transformers the ability to _forget well_.
 
-The full Ash model targets a sparse Mixture-of-Experts architecture (17B active parameters x 128 experts), loosely based on Llama 4 Maverick. **Ashy-Small** is the current proof-of-concept: a GPT-2 scale (124M + 7M CER = 131M params) dense model with all three CER primitives integrated and trainable on a single GPU.
+The full Ash model targets a sparse Mixture-of-Experts architecture (17B active parameters x 128 experts), loosely based on Llama 4 Maverick, with **multimodal** support for image, video, and audio via embedded pretrained encoders (SigLIP 2 for vision, Whisper v3 for audio). **Ashy-Small** is the current proof-of-concept: a GPT-2 scale (124M + 7M CER = 131M params) dense model with all three CER primitives integrated and trainable on a single GPU.
 
 ---
 
@@ -112,7 +112,7 @@ This produces `train.bin` and `val.bin` — pre-tokenized uint16 binary files.
 ### 2. Train
 
 ```bash
-# Full Ashy-Small with CER (requires GPU, ~100K steps)
+# Ashy-Small with CER (requires GPU, ~100K steps)
 python scripts/train.py --config configs/ashy_small.yaml
 
 # Vanilla GPT-2 baseline (no CER, for ablation comparison)
@@ -120,6 +120,12 @@ python scripts/train.py --config configs/ashy_small_no_cer.yaml
 
 # Tiny debug model (runs in <1 min on CPU, for testing the pipeline)
 python scripts/train.py --config configs/ashy_small_debug.yaml
+
+# Ash Full text-only (17Bx128E, requires multi-GPU cluster — see "Ash Full" below)
+python scripts/train.py --config configs/ash_full.yaml
+
+# Ash Full multimodal (requires pretrained text checkpoint — see "Ash Full" below)
+python scripts/train.py --config configs/ash_full_multimodal.yaml --resume checkpoints/ash_full_text.pt
 ```
 
 Set `data_dir` in the config YAML to point at your prepared data, or it will fall back to random tokens.
@@ -283,26 +289,63 @@ The data pipeline framework manages training data sources declaratively via YAML
 
 ### Source definitions
 
-Source YAMLs live in `data_sources/`. Shipped examples:
+Source YAMLs live in `data_sources/`. Each source has a `modality` field (`text`, `image_text`, `video_text`, `audio_text`, or `multimodal_instruction`). Shipped sources:
 
-| Source | Type | Description |
+**Text** (base LLM pretraining):
+
+| Source | Description |
+|---|---|
+| `fineweb` | Curated web text from CommonCrawl |
+| `fineweb_edu` | Higher-quality educational web text |
+| `redpajama_commoncrawl` | Large general web shard (CC) |
+| `the_stack_v2` | Permissively-licensed source code |
+| `redpajama_stackexchange` | Technical Q&A style reasoning text |
+| `redpajama_book` | Long-form book-like corpus |
+| `wikipedia` | English Wikipedia articles |
+| `arxiv` | ArXiv scientific papers |
+| `openwebmath` | Math-heavy corpus for quantitative reasoning |
+| `ultrachat_200k` | Instruction/dialogue data (use low %) |
+
+**Image-Text** (vision pretraining):
+
+| Source | Size | Description |
 |---|---|---|
-| `fineweb` | HuggingFace | Curated web text from CommonCrawl |
-| `fineweb_edu` | HuggingFace | Higher-quality educational web text |
-| `redpajama_commoncrawl` | HuggingFace | Large general web shard (CC) |
-| `the_stack_v2` | HuggingFace | Permissively-licensed source code |
-| `redpajama_stackexchange` | HuggingFace | Technical Q&A style reasoning text |
-| `redpajama_book` | HuggingFace | Long-form book-like corpus |
-| `wikipedia` | HuggingFace | English Wikipedia articles |
-| `arxiv` | HuggingFace | ArXiv scientific papers |
-| `openwebmath` | HuggingFace | Math-heavy corpus for quantitative reasoning |
-| `ultrachat_200k` | HuggingFace | Instruction/dialogue data (use low %) |
+| `datacomp_1b` | 1.4B pairs | CLIP-filtered image-text pairs from CommonCrawl |
+| `coyo_700m` | 747M pairs | Image-text pairs from Kakao Brain with rich metadata |
+| `cc12m` | 12M pairs | Conceptual Captions 12M from Google |
+| `sharegpt4v` | 1.2M captions | High-quality GPT-4V-generated image captions |
+
+**Video-Text** (video understanding):
+
+| Source | Size | Description |
+|---|---|---|
+| `internvid` | 7M+ videos | LLM-annotated video-text dataset |
+| `panda_70m` | 70M samples | High-resolution video-text with strong semantic coherence |
+| `webvid_10m` | 10.7M pairs | Web-scraped video-text for pretraining |
+
+**Audio-Text** (speech and audio understanding):
+
+| Source | Size | Description |
+|---|---|---|
+| `librispeech` | ~1,000 hrs | Read English audiobook speech |
+| `common_voice` | 19K+ hrs | Mozilla crowdsourced multilingual speech (112+ languages) |
+| `gigaspeech` | 10K hrs | Multi-domain English speech |
+| `wavcaps` | 400K clips | ChatGPT-assisted audio captions |
+| `audiocaps` | 46K clips | Human-written captions on AudioSet subset |
+
+**Multimodal Instruction Tuning** (SFT stage):
+
+| Source | Size | Description |
+|---|---|---|
+| `llava_instruct_150k` | 150K + 515K VQA | GPT-generated visual instruction samples |
+| `llava_video_178k` | 178K videos, 1.3M samples | Video instruction-following data |
 
 ### YAML schema
 
 ```yaml
 name: my_source
 description: "What this source contains"
+modality: text  # text | image_text | video_text | audio_text | multimodal_instruction
 
 source:
   type: huggingface   # huggingface | url | local
@@ -338,6 +381,8 @@ cleaning:
         tokenizer: gpt2
 ```
 
+The `modality` field defaults to `text` for backwards compatibility with existing sources. Multimodal sources use modality-specific cleaning steps (e.g., `download_images`, `clip_score_filter`, `audio_resample`, `frame_extraction`).
+
 Sources with `allowed_use: unknown` are flagged for quarantine per the [TRAINING.md](TRAINING.md) sourcing policy.
 
 ### CLI usage
@@ -365,7 +410,12 @@ python scripts/pipeline.py run --all --dry-run
 python scripts/pipeline.py run --all --sources-dir my_sources/ --base-dir /data/
 ```
 
-Available cleaning steps: `strip_html`, `strip_latex_commands`, `normalize_whitespace`, `min_length_filter`, `max_length_filter`, `dedup_exact`, `tokenize`.
+Available cleaning steps:
+
+- **Text**: `strip_html`, `strip_latex_commands`, `normalize_whitespace`, `min_length_filter`, `max_length_filter`, `dedup_exact`, `tokenize`
+- **Image**: `download_images`, `clip_score_filter`, `resolution_filter`, `aspect_ratio_filter`, `caption_length_filter`
+- **Video**: `download_video`, `video_duration_filter`, `frame_extraction`
+- **Audio**: `download_audio`, `audio_resample`, `audio_duration_filter`, `audio_snr_filter`
 
 ### Makefile shortcuts
 
@@ -401,13 +451,16 @@ Tests cover: output shapes, value ranges, gradient flow, causal masking, paramet
 ```
 ash/
 ├── ash/
-│   ├── config.py              # ModelConfig, CERConfig, TrainingConfig, ModalConfig
+│   ├── config.py              # Model, CER, MoE, Multimodal, Training configs
 │   ├── model/
 │   │   ├── embeddings.py      # Token + positional embeddings
 │   │   ├── attention.py       # Causal self-attention + ASH integration
 │   │   ├── ffn.py             # Feed-forward network
 │   │   ├── block.py           # Transformer block (attention + CER + FFN)
 │   │   ├── gpt.py             # Full GPT model
+│   │   ├── vision_encoder.py  # SigLIP 2 wrapper + MLP projector
+│   │   ├── audio_encoder.py   # Whisper v3 encoder wrapper + MLP projector
+│   │   ├── multimodal_embeddings.py  # Special token replacement with encoder outputs
 │   │   └── cer/
 │   │       ├── esc.py         # Epistemic State Channels
 │   │       ├── ash_heads.py   # Active Suppression Heads
@@ -423,7 +476,7 @@ ash/
 │   │   ├── modal_runner.py    # Modal GPU dispatch
 │   │   └── modal_data.py      # Upload data to Modal Volumes
 │   ├── pipeline/
-│   │   ├── source.py          # YAML source loader and validator
+│   │   ├── source.py          # YAML source loader and validator (with modality)
 │   │   ├── fetch.py           # Fetch from HuggingFace, URL, or local
 │   │   ├── clean.py           # Cleaning step registry and executor
 │   │   └── runner.py          # Pipeline orchestrator
@@ -433,10 +486,10 @@ ash/
 │   └── eval/
 │       ├── cer_battery.py     # CER test suite runner
 │       └── t1-t8 tests        # Individual CER evaluation tests
-├── data_sources/              # YAML data source definitions (pipeline)
-├── configs/                   # YAML training configs
+├── data_sources/              # YAML data source definitions (text + multimodal)
+├── configs/                   # YAML training configs (Ashy-Small + Ash Full)
 ├── scripts/                   # Entry points (train, eval, prepare_data, visualize)
-├── tests/                     # 42 unit and integration tests
+├── tests/                     # Unit and integration tests
 ├── plans/
 │   └── SOTA.md               # Full architecture plan for Ash at scale
 └── docs/
@@ -445,29 +498,91 @@ ash/
 
 ---
 
-## Scaling to Full Ash
+## Ash Full
 
-Ashy-Small is the proof-of-concept. The [full Ash architecture](plans/SOTA.md) targets:
+Ashy-Small is the proof-of-concept. Ash Full is the target production model. Two configs are provided:
 
-| | Ashy-Small | Ash |
-|---|---|---|
-| Architecture | Dense GPT-2 | Sparse MoE |
-| Active parameters | 131M | 17B |
-| Total parameters | 131M | ~400B+ |
-| Experts | — | 128 (top-2 + 1 shared) |
-| Context length | 1,024 | 128K (1M stretch) |
-| Attention | Learned positional + manual | RoPE + GQA + Flash Attention 2 |
-| FFN | GELU | SwiGLU (per-expert) |
-| Normalisation | LayerNorm | RMSNorm |
-| Framework | Pure PyTorch | Megatron-Core (fork) |
-| Hardware | 1x GPU | 512x H100 |
+- **`configs/ash_full.yaml`** — Text-only 17Bx128E baseline
+- **`configs/ash_full_multimodal.yaml`** — Full multimodal variant (text + image + video + audio)
 
-**What carries over from Ashy-Small:**
+### Architecture comparison
+
+| | Ashy-Small | Ash Full | Ash Full Multimodal |
+|---|---|---|---|
+| Architecture | Dense GPT-2 | Sparse MoE | Sparse MoE + encoders |
+| Active parameters | 131M | 17B | 17B + ~1.9B encoders |
+| Total parameters | 131M | ~400B+ | ~400B+ |
+| Experts | — | 128 (top-2 + 1 shared) | 128 (top-2 + 1 shared) |
+| Context length | 1,024 | 128K (1M stretch) | 128K |
+| Attention | Learned positional | RoPE + GQA (8:1) + Flash2 | RoPE + GQA + Flash2 |
+| FFN | GELU | SwiGLU (per-expert) | SwiGLU (per-expert) |
+| Normalisation | LayerNorm | RMSNorm | RMSNorm |
+| Vision | — | — | SigLIP 2 SO400M (~400M) |
+| Audio | — | — | Whisper v3 encoder (~1.5B) |
+| Framework | Pure PyTorch | Megatron-Core (fork) | Megatron-Core (fork) |
+| Hardware | 1x GPU | 512x H100 | 512x H100 |
+
+### Training Ash Full (text-only)
+
+```bash
+# Full 17Bx128E text-only model (requires multi-GPU cluster)
+python scripts/train.py --config configs/ash_full.yaml
+```
+
+This trains on 2-4T tokens of text data from the text sources (fineweb, wikipedia, arxiv, code, etc.) with CER curriculum scheduling.
+
+### Training Ash Full Multimodal
+
+Multimodal training happens in 3 stages **after** the base text-only model is pretrained. Each stage freezes/unfreezes different components:
+
+```bash
+# Assumes a pretrained text-only checkpoint exists
+python scripts/train.py --config configs/ash_full_multimodal.yaml --resume checkpoints/ash_full_text.pt
+```
+
+**Stage 1 — Alignment** (~5K steps):
+- Frozen: LLM backbone + vision encoder + audio encoder
+- Training: Only MLP projection layers (~30M params)
+- Data: CC12M + ShareGPT4V + AudioCaps
+- Goal: Teach projectors to map encoder outputs into the LLM embedding space
+- Time: Hours on 8 GPUs
+
+**Stage 1.5 — Mid-training** (~50K steps):
+- Unfrozen: Everything (LLM + encoders + projectors)
+- Data: DataComp-1B, COYO-700M, InternVid, Panda-70M, LibriSpeech, Common Voice, GigaSpeech, WavCaps (mixed 50/50 with text-only data to prevent forgetting)
+- Goal: Deep multimodal understanding and concept grounding
+
+**Stage 2 — Instruction tuning** (~10K steps):
+- Frozen: Vision + audio encoders (stabilize representations)
+- Training: LLM + projectors
+- Data: LLaVA-Instruct-150K + LLaVA-Video-178K
+- Goal: Follow multimodal instructions, conversational ability
+
+### Embedded encoders
+
+Ash Full Multimodal uses **pretrained encoders** bolted onto the LLM via learned MLP projection layers (the LLaVA/InternVL architecture pattern):
+
+| Component | Model | Params | Role |
+|---|---|---|---|
+| Vision encoder | SigLIP 2 SO400M | ~400M | Encodes images and video frames |
+| Audio encoder | Whisper large-v3 (encoder only) | ~1.5B | Encodes speech and audio |
+| Vision projector | 2-layer MLP | ~14M | Maps SigLIP dim (1152) → LLM dim (6144) |
+| Audio projector | 2-layer MLP | ~16M | Maps Whisper dim (1280) → LLM dim (6144) |
+
+Video is handled by sampling frames (default: 1fps, up to 32 frames) and encoding each frame independently through the vision encoder. No separate video model is needed.
+
+### CER + multimodal
+
+CER is especially valuable for multimodal — vision tokens from image patches are highly redundant (adjacent patches carry similar information). With `cer_cross_modal: true`, ESC receives modality-aware attention statistics and can learn to aggressively close redundant vision/audio tokens after early integration, acting as a **learned token compressor** rather than a fixed architectural bottleneck (like Q-Former).
+
+### What carries over from Ashy-Small
+
 - The `ash/model/cer/` module (ESC, ASH, CR) lifts directly into the Megatron integration
 - CER curriculum scheduling and auxiliary losses
 - The 8-test CER evaluation battery
 
-**What changes at scale:**
+### What changes at scale
+
 - MoE replaces dense FFN (128 experts, top-2 routing, 1 shared)
 - CER operates at attention level, MoE at FFN level — they are orthogonal
 - Custom fused CUDA kernel for Flash Attention 2 + ASH sigmoid (avoids 2x memory)

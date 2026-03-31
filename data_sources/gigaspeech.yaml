@@ -1,0 +1,45 @@
+name: gigaspeech
+version: "1.0"
+description: "10,000 hours of labeled multi-domain English speech from audiobooks, podcasts, and YouTube"
+modality: audio_text
+
+source:
+  type: huggingface
+  path: "speechcolab/gigaspeech"
+  subset: "xl"
+  split: "train"
+  revision: null
+
+license:
+  name: "Apache-2.0"
+  url: "https://www.apache.org/licenses/LICENSE-2.0"
+  allowed_use: research
+  attribution: "SpeechColab"
+
+provenance:
+  dedup_status: "source-level dedup"
+  pii_scrub: "none"
+  quality_filter: "Force-aligned + confidence scoring"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/gigaspeech"
+
+cleaning:
+  output_dir: "data/clean/gigaspeech"
+  steps:
+    - name: download_audio
+    - name: audio_resample
+      params:
+        target_rate: 16000
+    - name: audio_duration_filter
+      params:
+        min_seconds: 1.0
+        max_seconds: 30.0
+    - name: audio_snr_filter
+      params:
+        min_snr_db: 10
+    - name: normalize_whitespace
+    - name: dedup_exact

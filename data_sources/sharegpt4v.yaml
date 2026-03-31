@@ -1,0 +1,41 @@
+name: sharegpt4v
+version: "1.0"
+description: "High-quality GPT-4V-generated image captions, expanded via trained captioner"
+modality: image_text
+
+source:
+  type: huggingface
+  path: "Lin-Chen/ShareGPT4V"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "Research-only"
+  url: "https://github.com/InternLM/InternLM-XComposer/blob/main/LICENSE"
+  allowed_use: research
+  attribution: "ShareGPT4V team"
+
+provenance:
+  dedup_status: "none"
+  pii_scrub: "none"
+  quality_filter: "GPT-4V generation + trained captioner"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/sharegpt4v"
+
+cleaning:
+  output_dir: "data/clean/sharegpt4v"
+  steps:
+    - name: download_images
+    - name: resolution_filter
+      params:
+        min_pixels: 224
+    - name: caption_length_filter
+      params:
+        min_chars: 20
+        max_chars: 2000
+    - name: dedup_exact

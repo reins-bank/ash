@@ -5,6 +5,91 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+# ---------------------------------------------------------------------------
+# Multimodal encoder configs
+# ---------------------------------------------------------------------------
+
+@dataclass
+class VisionConfig:
+    """Vision encoder configuration (SigLIP 2 default)."""
+
+    enabled: bool = True
+    encoder_name: str = "google/siglip2-so400m-patch14-384"
+    encoder_hidden_dim: int = 1152  # SigLIP 2 SO400M output dim
+    image_size: int = 384
+    patch_size: int = 14
+    max_tiles: int = 6  # dynamic resolution tiling
+    projection_dim: int = 6144  # synced to d_model at load time
+    projection_layers: int = 2  # 2-layer MLP projector
+    freeze_encoder: bool = True
+    # Video (frames through vision encoder)
+    video_max_frames: int = 32
+    video_fps: float = 1.0
+
+
+@dataclass
+class AudioConfig:
+    """Audio encoder configuration (Whisper v3 default)."""
+
+    enabled: bool = True
+    encoder_name: str = "openai/whisper-large-v3"
+    encoder_hidden_dim: int = 1280  # Whisper large-v3 output dim
+    sample_rate: int = 16000
+    max_duration_sec: float = 30.0
+    projection_dim: int = 6144  # synced to d_model at load time
+    projection_layers: int = 2
+    freeze_encoder: bool = True
+
+
+@dataclass
+class MultimodalConfig:
+    """Top-level multimodal configuration. Disabled by default for backwards compat."""
+
+    enabled: bool = False
+    vision: VisionConfig = field(default_factory=VisionConfig)
+    audio: AudioConfig = field(default_factory=AudioConfig)
+    # Special tokens (added to vocab)
+    image_token: str = "<image>"
+    video_token: str = "<video>"
+    audio_token: str = "<audio>"
+    # CER cross-modal: ESC receives modality-aware attention stats
+    cer_cross_modal: bool = True
+
+
+@dataclass
+class MultimodalTrainingStage:
+    """Per-stage config for multimodal training pipeline."""
+
+    name: str = "alignment"
+    max_steps: int = 5000
+    learning_rate: float = 1e-3
+    freeze_llm: bool = True
+    freeze_vision_encoder: bool = True
+    freeze_audio_encoder: bool = True
+    freeze_projectors: bool = False
+    data_sources: list[str] = field(default_factory=list)
+    batch_size: int = 256
+    gradient_accumulation_steps: int = 1
+
+
+# ---------------------------------------------------------------------------
+# MoE config
+# ---------------------------------------------------------------------------
+
+@dataclass
+class MoEConfig:
+    """Mixture of Experts configuration."""
+
+    enabled: bool = False
+    n_experts: int = 128
+    n_active: int = 2  # top-k routing
+    shared_expert: bool = True
+
+
+# ---------------------------------------------------------------------------
+# CER config
+# ---------------------------------------------------------------------------
+
 @dataclass
 class CERConfig:
     """Configuration for CER framework components."""
@@ -33,18 +118,21 @@ class CERConfig:
 
 @dataclass
 class ModelConfig:
-    """GPT-2 scale model configuration."""
+    """Model configuration. Supports GPT-2 scale (Ashy-Small) through full 17Bx128E."""
 
     n_layer: int = 12
     n_head: int = 12
+    n_kv_head: int | None = None  # GQA KV heads; None = MHA (n_kv_head == n_head)
     d_model: int = 768
     vocab_size: int = 50257
     block_size: int = 1024
     dropout: float = 0.0
     bias: bool = True
-    activation: str = "gelu"
-    norm_type: str = "layernorm"
+    activation: str = "gelu"  # gelu | swiglu
+    norm_type: str = "layernorm"  # layernorm | rmsnorm
     cer: CERConfig = field(default_factory=CERConfig)
+    moe: MoEConfig = field(default_factory=MoEConfig)
+    multimodal: MultimodalConfig = field(default_factory=MultimodalConfig)
 
     @property
     def head_dim(self) -> int:
@@ -116,6 +204,9 @@ class TrainingConfig:
     # Modal
     modal: ModalConfig = field(default_factory=ModalConfig)
 
+    # Multimodal training stages (empty = text-only training)
+    multimodal_stages: list[MultimodalTrainingStage] = field(default_factory=list)
+
 
 def _apply_overrides(dc: object, overrides: dict) -> None:
     """Recursively apply dict overrides to a dataclass instance."""
@@ -135,6 +226,18 @@ def _apply_overrides(dc: object, overrides: dict) -> None:
             setattr(dc, k, v)
 
 
+def _parse_multimodal_stages(raw_stages: list[dict]) -> list[MultimodalTrainingStage]:
+    """Parse a list of raw dicts into MultimodalTrainingStage instances."""
+    stages = []
+    for raw_stage in raw_stages:
+        stage = MultimodalTrainingStage()
+        for k, v in raw_stage.items():
+            if hasattr(stage, k):
+                setattr(stage, k, v)
+        stages.append(stage)
+    return stages
+
+
 def load_config(yaml_path: str | Path) -> tuple[ModelConfig, TrainingConfig]:
     """Load config from YAML, applying overrides on top of defaults."""
     with open(yaml_path) as f:
@@ -146,9 +249,19 @@ def load_config(yaml_path: str | Path) -> tuple[ModelConfig, TrainingConfig]:
     if "model" in raw:
         _apply_overrides(model_cfg, raw["model"])
     if "training" in raw:
-        _apply_overrides(train_cfg, raw["training"])
+        # Handle multimodal_stages list separately (not a nested dataclass)
+        training_raw = raw["training"]
+        stages_raw = training_raw.pop("multimodal_stages", None)
+        _apply_overrides(train_cfg, training_raw)
+        if stages_raw:
+            train_cfg.multimodal_stages = _parse_multimodal_stages(stages_raw)
 
     # Sync block_size
     train_cfg.block_size = model_cfg.block_size
+
+    # Sync multimodal projection dims with d_model
+    if model_cfg.multimodal.enabled:
+        model_cfg.multimodal.vision.projection_dim = model_cfg.d_model
+        model_cfg.multimodal.audio.projection_dim = model_cfg.d_model
 
     return model_cfg, train_cfg

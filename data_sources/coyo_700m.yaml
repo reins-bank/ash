@@ -1,0 +1,48 @@
+name: coyo_700m
+version: "1.0"
+description: "Large-scale image-text pairs from CommonCrawl by Kakao Brain with rich metadata"
+modality: image_text
+
+source:
+  type: huggingface
+  path: "kakaobrain/coyo-700m"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "CC-BY-4.0"
+  url: "https://creativecommons.org/licenses/by/4.0/"
+  allowed_use: research
+  attribution: "Kakao Brain"
+
+provenance:
+  dedup_status: "URL-level dedup + pHash near-dedup"
+  pii_scrub: "face blur applied"
+  quality_filter: "CLIP ViT-B/32 + aesthetic score"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/coyo_700m"
+
+cleaning:
+  output_dir: "data/clean/coyo_700m"
+  steps:
+    - name: download_images
+    - name: clip_score_filter
+      params:
+        min_score: 0.28
+    - name: resolution_filter
+      params:
+        min_pixels: 256
+    - name: aspect_ratio_filter
+      params:
+        min_ratio: 0.33
+        max_ratio: 3.0
+    - name: dedup_exact
+    - name: caption_length_filter
+      params:
+        min_chars: 10
+        max_chars: 1000

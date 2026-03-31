@@ -1,0 +1,45 @@
+name: cc12m
+version: "1.0"
+description: "Conceptual Captions 12M — relaxed-filtered web image-text pairs from Google"
+modality: image_text
+
+source:
+  type: huggingface
+  path: "google-research-datasets/conceptual_12m"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "Custom (research)"
+  url: "https://github.com/google-research-datasets/conceptual-12m/blob/main/LICENSE"
+  allowed_use: research
+  attribution: "Google Research"
+
+provenance:
+  dedup_status: "URL-level dedup"
+  pii_scrub: "alt-text entity anonymization"
+  quality_filter: "Relaxed CC3M pipeline"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/cc12m"
+
+cleaning:
+  output_dir: "data/clean/cc12m"
+  steps:
+    - name: download_images
+    - name: resolution_filter
+      params:
+        min_pixels: 256
+    - name: aspect_ratio_filter
+      params:
+        min_ratio: 0.33
+        max_ratio: 3.0
+    - name: dedup_exact
+    - name: caption_length_filter
+      params:
+        min_chars: 5
+        max_chars: 500

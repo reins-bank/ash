@@ -1,0 +1,134 @@
+# Ash Full Multimodal: 17Bx128E + SigLIP 2 vision + Whisper v3 audio + CER
+# Assumes base LLM is pretrained (text-only) before multimodal stages begin.
+
+model:
+  n_layer: 48
+  n_head: 64
+  n_kv_head: 8
+  d_model: 6144
+  vocab_size: 128000
+  block_size: 131072
+  dropout: 0.0
+  bias: false
+  activation: swiglu
+  norm_type: rmsnorm
+
+  moe:
+    enabled: true
+    n_experts: 128
+    n_active: 2
+    shared_expert: true
+
+  cer:
+    enabled: true
+    n_ash_heads: 2
+    esc_mlp_hidden: 256
+    ash_lambda_init: 0.01
+    cr_dim_divisor: 4
+    cr_injection_scale: 0.1
+    lambda_esc_max: 0.1
+    lambda_ash_reg_max: 0.05
+    curriculum_phase1_end: 0.0    # CER already trained in base LLM
+    curriculum_phase2_end: 0.0
+
+  multimodal:
+    enabled: true
+
+    vision:
+      enabled: true
+      encoder_name: "google/siglip2-so400m-patch14-384"
+      encoder_hidden_dim: 1152
+      image_size: 384
+      patch_size: 14
+      max_tiles: 6
+      projection_layers: 2
+      freeze_encoder: true
+      video_max_frames: 32
+      video_fps: 1.0
+
+    audio:
+      enabled: true
+      encoder_name: "openai/whisper-large-v3"
+      encoder_hidden_dim: 1280
+      sample_rate: 16000
+      max_duration_sec: 30.0
+      projection_layers: 2
+      freeze_encoder: true
+
+    cer_cross_modal: true
+
+training:
+  learning_rate: 2e-5         # overridden per-stage below
+  lr_decay_to: 2e-6
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  warmup_steps: 500
+  max_steps: 65000            # sum of all stages
+  batch_size: 256
+  gradient_accumulation_steps: 4
+  dataset: multimodal
+  data_dir: data/
+  wandb_project: ash-full-multimodal
+  wandb_enabled: true
+  dtype: bfloat16
+  compile: true
+  gradient_checkpointing: true
+  save_interval: 1000
+  eval_interval: 500
+  log_interval: 10
+
+  # --- Multimodal training stages ---
+  # Stage 0 (base LLM pretraining) is done separately via ash_full.yaml.
+  # These stages run sequentially after loading the pretrained text-only checkpoint.
+
+  multimodal_stages:
+    # Stage 1: Alignment — train only projection layers
+    - name: alignment
+      max_steps: 5000
+      learning_rate: 1e-3
+      freeze_llm: true
+      freeze_vision_encoder: true
+      freeze_audio_encoder: true
+      freeze_projectors: false
+      batch_size: 256
+      gradient_accumulation_steps: 1
+      data_sources:
+        - cc12m
+        - sharegpt4v
+        - audiocaps
+
+    # Stage 1.5: Mid-training — unfreeze everything, deep multimodal learning
+    - name: mid_training
+      max_steps: 50000
+      learning_rate: 2e-5
+      freeze_llm: false
+      freeze_vision_encoder: false
+      freeze_audio_encoder: false
+      freeze_projectors: false
+      batch_size: 512
+      gradient_accumulation_steps: 4
+      data_sources:
+        - datacomp_1b
+        - coyo_700m
+        - internvid
+        - panda_70m
+        - librispeech
+        - common_voice
+        - gigaspeech
+        - wavcaps
+
+    # Stage 2: Instruction tuning — re-freeze encoders, SFT on instructions
+    - name: instruction_tuning
+      max_steps: 10000
+      learning_rate: 2e-5
+      freeze_llm: false
+      freeze_vision_encoder: true
+      freeze_audio_encoder: true
+      freeze_projectors: false
+      batch_size: 128
+      gradient_accumulation_steps: 2
+      data_sources:
+        - llava_instruct_150k
+        - llava_video_178k

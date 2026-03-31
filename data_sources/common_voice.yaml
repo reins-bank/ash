@@ -1,0 +1,45 @@
+name: common_voice
+version: "1.0"
+description: "Mozilla crowdsourced multilingual speech dataset with 19K+ validated hours across 112+ languages"
+modality: audio_text
+
+source:
+  type: huggingface
+  path: "mozilla-foundation/common_voice_17_0"
+  subset: "en"
+  split: "train"
+  revision: null
+
+license:
+  name: "CC-0"
+  url: "https://creativecommons.org/publicdomain/zero/1.0/"
+  allowed_use: commercial
+  attribution: "Mozilla Foundation"
+
+provenance:
+  dedup_status: "speaker-level splits"
+  pii_scrub: "volunteer-contributed"
+  quality_filter: "Community vote validation"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/common_voice"
+
+cleaning:
+  output_dir: "data/clean/common_voice"
+  steps:
+    - name: download_audio
+    - name: audio_resample
+      params:
+        target_rate: 16000
+    - name: audio_duration_filter
+      params:
+        min_seconds: 1.0
+        max_seconds: 30.0
+    - name: audio_snr_filter
+      params:
+        min_snr_db: 10
+    - name: normalize_whitespace
+    - name: dedup_exact

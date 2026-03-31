@@ -1,0 +1,46 @@
+name: llava_video_178k
+version: "1.0"
+description: "178K videos with 1.3M instruction-following samples for video understanding"
+modality: multimodal_instruction
+
+source:
+  type: huggingface
+  path: "lmms-lab/LLaVA-Video-178K"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "Apache-2.0"
+  url: "https://www.apache.org/licenses/LICENSE-2.0"
+  allowed_use: research
+  attribution: "LMMs Lab"
+
+provenance:
+  dedup_status: "video-level dedup"
+  pii_scrub: "none"
+  quality_filter: "Multi-stage GPT-4o annotation"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/llava_video_178k"
+
+cleaning:
+  output_dir: "data/clean/llava_video_178k"
+  steps:
+    - name: download_video
+    - name: video_duration_filter
+      params:
+        min_seconds: 3
+        max_seconds: 300
+    - name: frame_extraction
+      params:
+        fps: 1.0
+    - name: normalize_whitespace
+    - name: caption_length_filter
+      params:
+        min_chars: 20
+        max_chars: 4000
+    - name: dedup_exact

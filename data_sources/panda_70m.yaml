@@ -1,0 +1,48 @@
+name: panda_70m
+version: "1.0"
+description: "70M high-resolution video-text samples with strong semantic coherence"
+modality: video_text
+
+source:
+  type: huggingface
+  path: "snap-research/Panda-70M"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "MIT"
+  url: "https://opensource.org/licenses/MIT"
+  allowed_use: commercial
+  attribution: "Snap Research"
+
+provenance:
+  dedup_status: "video-level dedup"
+  pii_scrub: "none"
+  quality_filter: "Multi-teacher caption scoring"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/panda_70m"
+
+cleaning:
+  output_dir: "data/clean/panda_70m"
+  steps:
+    - name: download_video
+    - name: video_duration_filter
+      params:
+        min_seconds: 3
+        max_seconds: 60
+    - name: frame_extraction
+      params:
+        fps: 1.0
+    - name: clip_score_filter
+      params:
+        min_score: 0.25
+    - name: dedup_exact
+    - name: caption_length_filter
+      params:
+        min_chars: 10
+        max_chars: 500

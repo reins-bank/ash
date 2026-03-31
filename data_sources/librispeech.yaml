@@ -1,0 +1,42 @@
+name: librispeech
+version: "1.0"
+description: "1000 hours of read English audiobook speech for ASR"
+modality: audio_text
+
+source:
+  type: huggingface
+  path: "openslr/librispeech_asr"
+  subset: "all"
+  split: "train"
+  revision: null
+
+license:
+  name: "CC-BY-4.0"
+  url: "https://creativecommons.org/licenses/by/4.0/"
+  allowed_use: commercial
+  attribution: "Vassil Panayotov et al."
+
+provenance:
+  dedup_status: "speaker-level splits"
+  pii_scrub: "synthetic read speech"
+  quality_filter: "Manual alignment + VAD"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/librispeech"
+
+cleaning:
+  output_dir: "data/clean/librispeech"
+  steps:
+    - name: download_audio
+    - name: audio_resample
+      params:
+        target_rate: 16000
+    - name: audio_duration_filter
+      params:
+        min_seconds: 1.0
+        max_seconds: 30.0
+    - name: normalize_whitespace
+    - name: dedup_exact

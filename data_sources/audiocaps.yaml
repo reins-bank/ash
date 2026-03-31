@@ -1,0 +1,46 @@
+name: audiocaps
+version: "1.0"
+description: "46K audio clips with human-written captions from AudioSet subset"
+modality: audio_text
+
+source:
+  type: huggingface
+  path: "d0rj/audiocaps"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "MIT"
+  url: "https://opensource.org/licenses/MIT"
+  allowed_use: research
+  attribution: "Chris Dongjoo Kim et al."
+
+provenance:
+  dedup_status: "AudioSet subset"
+  pii_scrub: "none"
+  quality_filter: "Human-written captions, crowd-validated"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/audiocaps"
+
+cleaning:
+  output_dir: "data/clean/audiocaps"
+  steps:
+    - name: download_audio
+    - name: audio_resample
+      params:
+        target_rate: 16000
+    - name: audio_duration_filter
+      params:
+        min_seconds: 1.0
+        max_seconds: 10.0
+    - name: normalize_whitespace
+    - name: caption_length_filter
+      params:
+        min_chars: 5
+        max_chars: 300
+    - name: dedup_exact

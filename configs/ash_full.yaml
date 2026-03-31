@@ -1,0 +1,54 @@
+# Ash Full: 17B active × 128 experts sparse MoE + CER (text-only baseline)
+# Reference: plans/SOTA.md
+
+model:
+  n_layer: 48
+  n_head: 64
+  n_kv_head: 8               # GQA 8:1 ratio
+  d_model: 6144
+  vocab_size: 128000          # BPE, 128K vocab
+  block_size: 131072          # 128K context
+  dropout: 0.0
+  bias: false
+  activation: swiglu
+  norm_type: rmsnorm
+
+  moe:
+    enabled: true
+    n_experts: 128
+    n_active: 2               # top-2 routing
+    shared_expert: true       # 1 always-active shared expert
+
+  cer:
+    enabled: true
+    n_ash_heads: 2            # 2 of 64 query heads are ASH
+    esc_mlp_hidden: 256
+    ash_lambda_init: 0.01
+    cr_dim_divisor: 4
+    cr_injection_scale: 0.1
+    lambda_esc_max: 0.1
+    lambda_ash_reg_max: 0.05
+    curriculum_phase1_end: 0.1
+    curriculum_phase2_end: 0.3
+
+training:
+  learning_rate: 3e-4
+  lr_decay_to: 3e-5
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  warmup_steps: 2000
+  max_steps: 500000
+  batch_size: 4096
+  gradient_accumulation_steps: 1
+  dataset: mixed
+  data_dir: data/
+  wandb_project: ash-full
+  wandb_enabled: true
+  dtype: bfloat16
+  compile: true
+  gradient_checkpointing: true
+  save_interval: 1000
+  eval_interval: 500
+  log_interval: 10

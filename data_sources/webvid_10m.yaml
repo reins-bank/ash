@@ -1,0 +1,45 @@
+name: webvid_10m
+version: "1.0"
+description: "10.7M video-text pairs scraped from the web for video-language pretraining"
+modality: video_text
+
+source:
+  type: huggingface
+  path: "iejMac/CLIP-WebVid"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "Custom (research)"
+  url: "https://github.com/m-bain/webvid/blob/main/LICENSE"
+  allowed_use: research
+  attribution: "Max Bain et al."
+
+provenance:
+  dedup_status: "URL-level dedup"
+  pii_scrub: "none"
+  quality_filter: "Alt-text heuristic filtering"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/webvid_10m"
+
+cleaning:
+  output_dir: "data/clean/webvid_10m"
+  steps:
+    - name: download_video
+    - name: video_duration_filter
+      params:
+        min_seconds: 3
+        max_seconds: 60
+    - name: frame_extraction
+      params:
+        fps: 1.0
+    - name: dedup_exact
+    - name: caption_length_filter
+      params:
+        min_chars: 5
+        max_chars: 500

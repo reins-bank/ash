@@ -1,0 +1,48 @@
+name: datacomp_1b
+version: "1.0"
+description: "CLIP-filtered image-text pairs from CommonCrawl, DataComp benchmark filtered subset"
+modality: image_text
+
+source:
+  type: huggingface
+  path: "mlfoundations/datacomp_1b"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "CC-BY-4.0"
+  url: "https://creativecommons.org/licenses/by/4.0/"
+  allowed_use: research
+  attribution: "DataComp team"
+
+provenance:
+  dedup_status: "URL-level dedup"
+  pii_scrub: "none"
+  quality_filter: "CLIP L/14 score top 30%"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/datacomp_1b"
+
+cleaning:
+  output_dir: "data/clean/datacomp_1b"
+  steps:
+    - name: download_images
+    - name: clip_score_filter
+      params:
+        min_score: 0.28
+    - name: resolution_filter
+      params:
+        min_pixels: 256
+    - name: aspect_ratio_filter
+      params:
+        min_ratio: 0.33
+        max_ratio: 3.0
+    - name: dedup_exact
+    - name: caption_length_filter
+      params:
+        min_chars: 10
+        max_chars: 1000

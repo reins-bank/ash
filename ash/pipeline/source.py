@@ -60,6 +60,7 @@ class DataSource:
     name: str = ""
     version: str = "1.0"
     description: str = ""
+    modality: str = "text"  # text | image_text | video_text | audio_text | multimodal_instruction
     source: SourceLocation = field(default_factory=SourceLocation)
     license: LicenseInfo = field(default_factory=LicenseInfo)
     provenance: ProvenanceInfo = field(default_factory=ProvenanceInfo)
@@ -74,6 +75,7 @@ class DataSource:
 _REQUIRED_FIELDS = {"name", "source", "license", "fetch", "cleaning"}
 _VALID_SOURCE_TYPES = {"huggingface", "url", "local"}
 _VALID_ALLOWED_USE = {"research", "commercial", "unknown"}
+_VALID_MODALITIES = {"text", "image_text", "video_text", "audio_text", "multimodal_instruction"}
 
 
 def _build_dataclass(dc_class: type, raw: dict) -> Any:
@@ -116,6 +118,7 @@ def load_source(yaml_path: str | Path) -> DataSource:
         name=raw.get("name", yaml_path.stem),
         version=str(raw.get("version", "1.0")),
         description=raw.get("description", ""),
+        modality=raw.get("modality", "text"),
         source=source_loc,
         license=license_info,
         provenance=provenance,
@@ -153,6 +156,10 @@ def validate_source(ds: DataSource) -> list[str]:
         errors.append(
             f"Invalid license.allowed_use '{ds.license.allowed_use}', "
             f"must be one of {_VALID_ALLOWED_USE}"
+        )
+    if ds.modality not in _VALID_MODALITIES:
+        errors.append(
+            f"Invalid modality '{ds.modality}', must be one of {_VALID_MODALITIES}"
         )
     if not ds.fetch.output_dir:
         errors.append("Missing required field: fetch.output_dir")

@@ -1,0 +1,49 @@
+name: wavcaps
+version: "1.0"
+description: "400K audio clips with ChatGPT-assisted captions for audio understanding"
+modality: audio_text
+
+source:
+  type: huggingface
+  path: "cvssp/WavCaps"
+  subset: "default"
+  split: "train"
+  revision: null
+
+license:
+  name: "Mixed"
+  url: "https://github.com/XinhaoMei/WavCaps/blob/master/LICENSE"
+  allowed_use: research
+  attribution: "CVSSP, University of Surrey"
+
+provenance:
+  dedup_status: "source-level dedup"
+  pii_scrub: "none"
+  quality_filter: "ChatGPT caption rewriting + CLAP filtering"
+
+fetch:
+  max_documents: null
+  max_size_gb: null
+  streaming: true
+  output_dir: "data/raw/wavcaps"
+
+cleaning:
+  output_dir: "data/clean/wavcaps"
+  steps:
+    - name: download_audio
+    - name: audio_resample
+      params:
+        target_rate: 16000
+    - name: audio_duration_filter
+      params:
+        min_seconds: 1.0
+        max_seconds: 30.0
+    - name: audio_snr_filter
+      params:
+        min_snr_db: 5
+    - name: normalize_whitespace
+    - name: caption_length_filter
+      params:
+        min_chars: 10
+        max_chars: 500
+    - name: dedup_exact

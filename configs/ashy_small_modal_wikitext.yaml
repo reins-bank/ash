@@ -1,0 +1,28 @@
+# Ashy-Small: WikiText proof-of-concept on Modal A10G.
+# Tuned for the WikiText dataset (~111M tokens):
+#   - 5K steps × 491K tokens/step = 2.5B tokens (~22 passes over data)
+#   - Short warmup (200 steps) so peak LR is reached quickly
+#   - Frequent eval/logging for debugging
+#   - CER phases: off until step 500, ramp 500-1500, full 1500+
+# Estimated runtime: ~30 minutes on A10G.
+
+model:
+  cer:
+    enabled: true
+
+training:
+  data_dir: "data/wikitext"
+  max_steps: 5000
+  warmup_steps: 200
+  batch_size: 6
+  gradient_accumulation_steps: 80
+  eval_interval: 100
+  save_interval: 500
+  log_interval: 5
+  gradient_checkpointing: true
+  compile: false
+  wandb_project: ashy-small
+  wandb_enabled: true
+  modal:
+    enabled: true
+    gpu: "A10G"

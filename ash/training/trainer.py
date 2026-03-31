@@ -124,13 +124,25 @@ class Trainer:
                     / dt
                 )
                 lr = self.optimizer.param_groups[0]["lr"]
+                # CER phase info
+                progress = self.step / max(1, config.max_steps)
+                p1_end = self.model_config.cer.curriculum_phase1_end
+                p2_end = self.model_config.cer.curriculum_phase2_end
+                if not self.model_config.cer.enabled:
+                    cer_tag = ""
+                elif progress < p1_end:
+                    cer_tag = " | CER: phase1 (off)"
+                elif progress < p2_end:
+                    ramp_pct = int((progress - p1_end) / (p2_end - p1_end) * 100)
+                    cer_tag = f" | CER: phase2 (ramp {ramp_pct}%)"
+                else:
+                    cer_tag = f" | CER: phase3 | λ_esc {lambda_esc:.4f} λ_ash {lambda_ash:.4f}"
+
                 log_msg = (
                     f"step {self.step:>6d} | loss {accum_loss:.4f} | "
                     f"lr {lr:.2e} | grad_norm {grad_norm:.2f} | "
-                    f"tok/s {tokens_per_sec:.0f}"
+                    f"tok/s {tokens_per_sec:.0f}{cer_tag}"
                 )
-                if lambda_esc > 0:
-                    log_msg += f" | λ_esc {lambda_esc:.4f} λ_ash {lambda_ash:.4f}"
                 print(log_msg)
 
                 if self.logger:

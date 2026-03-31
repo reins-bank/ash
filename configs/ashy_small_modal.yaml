@@ -1,10 +1,10 @@
 # Ashy-Small: GPT-2 117M + CER — training on Modal GPU.
-# Inherits all defaults; only overrides for Modal dispatch.
+# General-purpose modal config (swap data_dir for your dataset).
 #
 # One-time setup:
 #   modal setup
 #   modal secret create wandb-secret WANDB_API_KEY=<your-key>
-#   make modal-upload-data  (upload pre-tokenized data to Modal volume)
+#   make modal-upload-data
 
 model:
   cer:
@@ -12,8 +12,11 @@ model:
 
 training:
   data_dir: "data/wikitext"
-  batch_size: 4
-  gradient_accumulation_steps: 120
+  warmup_steps: 500
+  batch_size: 6
+  gradient_accumulation_steps: 80
+  eval_interval: 200
+  save_interval: 1000
   gradient_checkpointing: true
   compile: false
   wandb_project: ashy-small

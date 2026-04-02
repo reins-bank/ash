@@ -69,7 +69,18 @@ training:
   batch_size: 256
   gradient_accumulation_steps: 4
   dataset: multimodal
-  data_dir: data/
+  data_dir: "data/ash_full"
+  data_sources:
+    - fineweb
+    - fineweb_edu
+    - wikipedia
+    - arxiv
+    - openwebmath
+    - the_stack_v2
+    - redpajama_commoncrawl
+    - redpajama_book
+    - redpajama_stackexchange
+    - ultrachat_200k
   wandb_project: ash-full-multimodal
   wandb_enabled: true
   dtype: bfloat16

@@ -7,9 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from ash.pipeline.source import DataSource
+from ash.data.storage import PipelineFS
 
 
-def _fetch_huggingface(ds: DataSource, output_dir: Path, dry_run: bool) -> dict[str, Any]:
+def _fetch_huggingface(
+    ds: DataSource, output_dir: str, dry_run: bool, fs: PipelineFS,
+) -> dict[str, Any]:
     """Fetch from a HuggingFace dataset."""
     info = {
         "method": "huggingface",
@@ -38,10 +41,10 @@ def _fetch_huggingface(ds: DataSource, output_dir: Path, dry_run: bool) -> dict[
 
     dataset = load_dataset(**kwargs)
 
-    # Write documents as JSONL
-    out_file = output_dir / "documents.jsonl"
+    # Write documents as JSONL (streams to S3 or local)
+    out_file = fs.join(output_dir, "documents.jsonl")
     count = 0
-    with open(out_file, "w") as f:
+    with fs.open_write(out_file) as f:
         for doc in dataset:
             f.write(json.dumps(doc, ensure_ascii=False) + "\n")
             count += 1
@@ -49,14 +52,17 @@ def _fetch_huggingface(ds: DataSource, output_dir: Path, dry_run: bool) -> dict[
                 break
 
     info["documents_fetched"] = count
-    info["output_file"] = str(out_file)
+    info["output_file"] = out_file
     info["status"] = "complete"
     return info
 
 
-def _fetch_url(ds: DataSource, output_dir: Path, dry_run: bool) -> dict[str, Any]:
+def _fetch_url(
+    ds: DataSource, output_dir: str, dry_run: bool, fs: PipelineFS,
+) -> dict[str, Any]:
     """Fetch from a URL (download)."""
     import urllib.request
+    import tempfile
 
     info = {"method": "url", "url": ds.source.path}
 
@@ -65,15 +71,28 @@ def _fetch_url(ds: DataSource, output_dir: Path, dry_run: bool) -> dict[str, Any
         return info
 
     filename = ds.source.path.rsplit("/", 1)[-1] or "download"
-    out_file = output_dir / filename
-    urllib.request.urlretrieve(ds.source.path, str(out_file))
+    out_file = fs.join(output_dir, filename)
 
-    info["output_file"] = str(out_file)
+    if fs.is_s3:
+        # Download to temp file, then upload to S3
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}") as tmp:
+            tmp_path = tmp.name
+        try:
+            urllib.request.urlretrieve(ds.source.path, tmp_path)
+            fs.upload_file(tmp_path, out_file)
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+    else:
+        urllib.request.urlretrieve(ds.source.path, out_file)
+
+    info["output_file"] = out_file
     info["status"] = "complete"
     return info
 
 
-def _fetch_local(ds: DataSource, output_dir: Path, dry_run: bool) -> dict[str, Any]:
+def _fetch_local(
+    ds: DataSource, output_dir: str, dry_run: bool, fs: PipelineFS,
+) -> dict[str, Any]:
     """Copy/symlink from a local path."""
     src = Path(ds.source.path)
     info = {"method": "local", "source_path": str(src)}
@@ -85,20 +104,32 @@ def _fetch_local(ds: DataSource, output_dir: Path, dry_run: bool) -> dict[str, A
     if not src.exists():
         raise FileNotFoundError(f"Local source not found: {src}")
 
-    if src.is_file():
-        dest = output_dir / src.name
-        shutil.copy2(str(src), str(dest))
-        info["output_file"] = str(dest)
-    elif src.is_dir():
-        # Copy contents into output_dir so clean step finds files at expected paths
-        for item in src.iterdir():
-            dest = output_dir / item.name
-            if item.is_file():
-                shutil.copy2(str(item), str(dest))
-            elif item.is_dir():
-                if dest.exists():
-                    shutil.rmtree(str(dest))
-                shutil.copytree(str(item), str(dest))
+    if fs.is_s3:
+        # Upload local files to S3
+        if src.is_file():
+            dest = fs.join(output_dir, src.name)
+            fs.upload_file(str(src), dest)
+            info["output_file"] = dest
+        elif src.is_dir():
+            for item in src.rglob("*"):
+                if item.is_file():
+                    rel = str(item.relative_to(src))
+                    dest = fs.join(output_dir, rel)
+                    fs.upload_file(str(item), dest)
+    else:
+        if src.is_file():
+            dest = Path(output_dir) / src.name
+            shutil.copy2(str(src), str(dest))
+            info["output_file"] = str(dest)
+        elif src.is_dir():
+            for item in src.iterdir():
+                dest = Path(output_dir) / item.name
+                if item.is_file():
+                    shutil.copy2(str(item), str(dest))
+                elif item.is_dir():
+                    if dest.exists():
+                        shutil.rmtree(str(dest))
+                    shutil.copytree(str(item), str(dest))
 
     info["status"] = "complete"
     return info
@@ -116,15 +147,22 @@ def fetch_source(ds: DataSource, dry_run: bool = False, base_dir: str | Path = "
 
     Returns a dict with status information about the fetch.
     """
-    base_dir = Path(base_dir)
-    output_dir = base_dir / ds.fetch.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
+    fs = PipelineFS(ds.storage)
+    # Validate storage backend BEFORE any expensive work (e.g. HuggingFace downloads)
+    if not dry_run:
+        fs.validate()
+    base_dir = str(base_dir)
+    output_dir = fs.join(base_dir, ds.fetch.output_dir)
+    fs.makedirs(output_dir)
 
     handler = _FETCH_HANDLERS.get(ds.source.type)
     if handler is None:
         raise ValueError(f"Unknown source type: {ds.source.type}")
 
-    result = handler(ds, output_dir, dry_run)
+    result = handler(ds, output_dir, dry_run, fs)
     result["source_name"] = ds.name
-    result["output_dir"] = str(output_dir)
+    result["output_dir"] = output_dir
+    if fs.is_s3:
+        result["storage"] = "s3"
+        result["bucket"] = fs._bucket
     return result

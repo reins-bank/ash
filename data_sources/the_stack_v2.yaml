@@ -2,6 +2,9 @@ name: the_stack_v2
 version: "1.0"
 description: "Permissively-licensed source code from Software Heritage archive"
 
+storage:
+  backend: s3
+
 source:
   type: huggingface
   path: "bigcode/the-stack-v2"

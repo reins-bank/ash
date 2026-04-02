@@ -40,3 +40,6 @@ cleaning:
         max_seconds: 30.0
     - name: normalize_whitespace
     - name: dedup_exact
+
+storage:
+  type: s3

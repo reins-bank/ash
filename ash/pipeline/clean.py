@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
+from ash.data.storage import PipelineFS
+
 
 # ---------------------------------------------------------------------------
 # Cleaning step registry
@@ -103,19 +105,23 @@ def clean_source(
 
     Reads from fetch.output_dir/documents.jsonl, applies cleaning steps,
     writes to cleaning.output_dir/clean.jsonl (and optionally tokenized .bin).
+    Supports both local filesystem and S3 storage via PipelineFS.
     """
     from ash.pipeline.source import DataSource  # avoid circular
 
-    base_dir = Path(base_dir)
-    input_dir = base_dir / ds.fetch.output_dir
-    output_dir = base_dir / ds.cleaning.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
+    fs = PipelineFS(ds.storage)
+    if not dry_run:
+        fs.validate()
+    base_dir = str(base_dir)
+    input_dir = fs.join(base_dir, ds.fetch.output_dir)
+    output_dir = fs.join(base_dir, ds.cleaning.output_dir)
+    fs.makedirs(output_dir)
 
-    input_file = input_dir / "documents.jsonl"
+    input_file = fs.join(input_dir, "documents.jsonl")
     result: dict[str, Any] = {
         "source_name": ds.name,
-        "input_dir": str(input_dir),
-        "output_dir": str(output_dir),
+        "input_dir": input_dir,
+        "output_dir": output_dir,
         "steps": [s.name for s in ds.cleaning.steps],
     }
 
@@ -123,7 +129,7 @@ def clean_source(
         result["status"] = "dry_run"
         return result
 
-    if not input_file.exists():
+    if not fs.exists(input_file):
         result["status"] = "skipped"
         result["reason"] = f"Input file not found: {input_file}"
         return result
@@ -147,13 +153,13 @@ def clean_source(
                 return result
             per_doc_steps.append((CLEANING_REGISTRY[step.name], step.params))
 
-    # Process documents
+    # Process documents (streaming read from local or S3)
     clean_docs: list[str] = []
     seen_hashes: set[int] = set()
     docs_read = 0
     docs_filtered = 0
 
-    with open(input_file) as f:
+    with fs.open_read(input_file) as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -182,16 +188,16 @@ def clean_source(
 
             clean_docs.append(text)
 
-    # Write clean JSONL
-    out_file = output_dir / "clean.jsonl"
-    with open(out_file, "w") as f:
+    # Write clean JSONL (streaming write to local or S3)
+    out_file = fs.join(output_dir, "clean.jsonl")
+    with fs.open_write(out_file) as f:
         for text in clean_docs:
             f.write(json.dumps({"text": text}, ensure_ascii=False) + "\n")
 
     result["documents_read"] = docs_read
     result["documents_filtered"] = docs_filtered
     result["documents_output"] = len(clean_docs)
-    result["output_file"] = str(out_file)
+    result["output_file"] = out_file
 
     # Tokenize if requested
     if do_tokenize and clean_docs:
@@ -207,12 +213,14 @@ def clean_source(
                 all_tokens.append(eot)
 
             arr = np.array(all_tokens, dtype=np.uint16)
-            bin_path = output_dir / "tokens.bin"
-            arr.tofile(str(bin_path))
+            bin_path = fs.join(output_dir, "tokens.bin")
+            fs.write_bytes(bin_path, arr.tobytes())
             result["tokens"] = len(all_tokens)
-            result["token_file"] = str(bin_path)
+            result["token_file"] = bin_path
         except ImportError:
             result["tokenize_skipped"] = "tiktoken not available"
 
     result["status"] = "complete"
+    if fs.is_s3:
+        result["storage"] = "s3"
     return result

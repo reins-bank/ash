@@ -28,13 +28,14 @@ def cmd_list(args: argparse.Namespace) -> None:
         print(f"No source YAMLs found in {args.sources_dir}")
         return
 
-    print(f"{'Name':<20} {'Type':<14} {'License':<20} {'Use':<12} {'Description'}")
-    print("-" * 90)
+    print(f"{'Name':<20} {'Type':<14} {'Storage':<8} {'License':<20} {'Use':<12} {'Description'}")
+    print("-" * 98)
     for ds in sources:
         errors = validate_source(ds)
         status = "" if not errors else f" [{len(errors)} errors]"
+        backend = ds.storage.backend
         print(
-            f"{ds.name:<20} {ds.source.type:<14} {ds.license.name:<20} "
+            f"{ds.name:<20} {ds.source.type:<14} {backend:<8} {ds.license.name:<20} "
             f"{ds.license.allowed_use:<12} {ds.description[:40]}{status}"
         )
 
@@ -89,7 +90,8 @@ def cmd_fetch(args: argparse.Namespace) -> None:
     """Fetch data from one or all sources."""
     sources = _resolve_sources(args)
     for ds in sources:
-        print(f"Fetching: {ds.name} ({ds.source.type}://{ds.source.path})")
+        storage_label = f" [s3]" if ds.storage.backend == "s3" else ""
+        print(f"Fetching: {ds.name} ({ds.source.type}://{ds.source.path}){storage_label}")
         errors = validate_source(ds)
         if errors:
             print(f"  INVALID: {errors}")
@@ -110,7 +112,8 @@ def cmd_clean(args: argparse.Namespace) -> None:
     """Clean/standardize data from one or all sources."""
     sources = _resolve_sources(args)
     for ds in sources:
-        print(f"Cleaning: {ds.name} ({len(ds.cleaning.steps)} steps)")
+        storage_label = f" [s3]" if ds.storage.backend == "s3" else ""
+        print(f"Cleaning: {ds.name} ({len(ds.cleaning.steps)} steps){storage_label}")
         errors = validate_source(ds)
         if errors:
             print(f"  INVALID: {errors}")

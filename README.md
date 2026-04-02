@@ -82,53 +82,95 @@ git clone <repo-url> && cd ash
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install
-pip install -e ".[dev]"
-
-# Optional: install Modal for cloud GPU training
-pip install -e ".[modal]"
+# Install (pick the extras you need)
+make install          # dev only (tests + lint)
+make install-modal    # + Modal cloud GPU support
+make install-s3       # + Modal + S3 remote storage (boto3)
 ```
 
 Requires Python 3.10+ and PyTorch 2.1+.
 
----
-
-## Training
-
-### 1. Prepare data
-
-Tokenize a dataset into memmap format (nanoGPT-style):
+For S3 remote storage (DigitalOcean Spaces), set these environment variables:
 
 ```bash
-# WikiText-103 (smaller, good for validation)
-python scripts/prepare_data.py --dataset wikitext --out-dir data/wikitext
-
-# OpenWebText (full pretraining corpus)
-python scripts/prepare_data.py --dataset openwebtext --out-dir data/openwebtext
+export AWS_ACCESS_KEY_ID=<your-do-spaces-access-key>
+export AWS_SECRET_ACCESS_KEY=<your-do-spaces-secret-key>
+export ASH_S3_BUCKET=<your-bucket-name>
+export ASH_S3_ENDPOINT_URL=https://<region>.digitaloceanspaces.com
 ```
 
-This produces `train.bin` and `val.bin` — pre-tokenized uint16 binary files.
+---
 
-### 2. Train
+## Quick Start: Prepare & Train
+
+The `ready.py` script handles the full workflow — fetching data, processing it, and optionally launching training — all in one command.
+
+### Available models
 
 ```bash
-# Ashy-Small with CER (requires GPU, ~100K steps)
-python scripts/train.py --config configs/ashy_small.yaml
+python scripts/ready.py --list
+```
+
+| Model | Description | Data Sources | Storage |
+|---|---|---|---|
+| `debug` | Tiny smoke test (CPU, random data) | None | local |
+| `ashy-small-wikitext` | WikiText proof-of-concept (~30 min on A10G) | wikipedia | local |
+| `ashy-small` | GPT-2 117M + CER, full training | fineweb, wikipedia, arxiv, openwebmath, the_stack_v2 | s3 |
+| `ash-full` | 17Bx128E MoE, text-only | 10 text sources | s3 |
+| `ash-full-multimodal` | 17Bx128E MoE + vision + audio | 10 text sources + multimodal | s3 |
+
+### Prepare data
+
+```bash
+# Prepare all data sources for a model (fetch, clean, tokenize, merge)
+python scripts/ready.py ashy-small
+
+# Dry run — show what would be done without downloading anything
+python scripts/ready.py ashy-small --dry-run
+
+# Or via Makefile:
+make ready MODEL=ashy-small
+```
+
+For `ashy-small`, this fetches and processes 5 data sources (fineweb, wikipedia, arxiv, openwebmath, the_stack_v2), tokenizes them, and merges the tokens into `train.bin` / `val.bin`. Sources configured with `storage: {backend: s3}` stream directly to your S3 bucket.
+
+### Train
+
+```bash
+# Launch training on Modal (after data is prepared)
+python scripts/ready.py ashy-small --train
+
+# Or prepare + train in one command:
+make ready-train MODEL=ashy-small
+
+# Or launch training directly:
+python scripts/train.py --config configs/ashy_small_modal_s3.yaml
+```
+
+### End-to-end examples
+
+```bash
+# Smoke test (no data needed, runs in <1 min on CPU)
+python scripts/train.py --config configs/ashy_small_debug.yaml
+
+# WikiText proof-of-concept on Modal (~30 min)
+python scripts/ready.py ashy-small-wikitext --train
+
+# Full Ashy-Small training on Modal with S3 data
+python scripts/ready.py ashy-small --train
 
 # Vanilla GPT-2 baseline (no CER, for ablation comparison)
 python scripts/train.py --config configs/ashy_small_no_cer.yaml
-
-# Tiny debug model (runs in <1 min on CPU, for testing the pipeline)
-python scripts/train.py --config configs/ashy_small_debug.yaml
-
-# Ash Full text-only (17Bx128E, requires multi-GPU cluster — see "Ash Full" below)
-python scripts/train.py --config configs/ash_full.yaml
-
-# Ash Full multimodal (requires pretrained text checkpoint — see "Ash Full" below)
-python scripts/train.py --config configs/ash_full_multimodal.yaml --resume checkpoints/ash_full_text.pt
 ```
 
-Set `data_dir` in the config YAML to point at your prepared data, or it will fall back to random tokens.
+### Legacy data preparation
+
+For simple single-dataset setups, the legacy `prepare_data.py` still works:
+
+```bash
+python scripts/prepare_data.py --dataset wikitext --out-dir data/wikitext
+python scripts/prepare_data.py --dataset openwebtext --out-dir data/openwebtext
+```
 
 ### 3. What to expect during training
 
@@ -165,38 +207,42 @@ python scripts/train.py --config configs/ashy_small.yaml --resume checkpoints/ck
 
 ### 5. Training on Modal (cloud GPU)
 
-For larger training runs, you can hand off to [Modal](https://modal.com)'s serverless GPUs. Training launches from your terminal and logs stream back in real time.
+For larger training runs, you can hand off to [Modal](https://modal.com)'s serverless GPUs. Training launches from your terminal and returns immediately. Checkpoints are saved to a persistent Modal Volume (`ash-checkpoints`).
 
 **One-time setup:**
 
 ```bash
-# Install Modal
-pip install -e ".[modal]"
+# Install Modal + S3 support
+make install-s3
 
 # Authenticate with Modal
 modal setup
 
 # (Optional) Set up W&B logging on Modal
 modal secret create wandb-secret WANDB_API_KEY=<your-key>
-
-# Upload pre-tokenized data to a Modal Volume
-# Works with both legacy flat layout (data/train.bin) and
-# pipeline output (data/clean/<source>/tokens.bin)
-make modal-upload-data
 ```
 
-**Run training on Modal:**
+**Two data modes:**
+
+| Mode | Config | Data flow | When to use |
+|---|---|---|---|
+| **S3 (recommended)** | `storage.backend: s3` | Modal mounts your S3 bucket directly via `CloudBucketMount` | Large datasets that don't fit locally |
+| **Volume** | `storage.backend: local` | Upload data to Modal Volume with `make modal-upload-data` | Small datasets, no S3 setup needed |
+
+S3 mode eliminates the upload step — Modal reads your training data directly from the bucket.
+
+**Run training:**
 
 ```bash
-make modal-train
+# Recommended: use ready.py with model names
+python scripts/ready.py ashy-small --train
 
-# Or directly:
-python scripts/train.py --config configs/ashy_small_modal.yaml
+# Or directly with a config:
+python scripts/train.py --config configs/ashy_small_modal_s3.yaml   # S3 mode
+python scripts/train.py --config configs/ashy_small_modal.yaml      # Volume mode
 ```
 
-Training dispatches to Modal in the background and returns immediately. Checkpoints are saved to a persistent Modal Volume (`ash-checkpoints`).
-
-**Monitoring a running training job:**
+**Monitoring a running job:**
 
 ```bash
 make modal-status          # check if still running
@@ -207,34 +253,14 @@ make modal-cancel          # stop the run
 
 **Configuring GPU and timeout:**
 
-The `modal` section in any YAML config controls the handoff:
-
 ```yaml
 training:
   modal:
-    enabled: true       # set to false to run locally
-    gpu: "A10G"         # GPU tier: "T4", "A10G", "A100", "H100"
-    timeout: 86400      # cost safety net in seconds (default: 24h)
-    data_volume: "ash-data"           # Modal Volume for training data
-    checkpoint_volume: "ash-checkpoints"  # Modal Volume for checkpoints
-    wandb_secret: "wandb-secret"      # Modal Secret name for W&B API key
-```
-
-GPU tiers in order of cost/performance: `T4` (cheapest, fine for GPT-2 scale) < `A10G` < `A100` < `H100`.
-
-**Using pipeline data with Modal:**
-
-After running the data pipeline locally, upload the tokenized output to Modal:
-
-```bash
-# Run pipeline to fetch + clean + tokenize a source
-python scripts/pipeline.py run --source wikipedia
-
-# Upload all .bin files (preserves directory structure)
-make modal-upload-data
-
-# Set data_dir in your config to match the volume path, e.g.:
-#   data_dir: "clean/wikipedia"  (maps to /data/clean/wikipedia/ on the volume)
+    enabled: true
+    gpu: "A10G"         # T4 < A10G < A100 < H100
+    timeout: 86400      # cost safety net (default: 24h)
+  storage:
+    backend: s3         # or "local" for Modal Volume mode
 ```
 
 ---
@@ -347,6 +373,11 @@ name: my_source
 description: "What this source contains"
 modality: text  # text | image_text | video_text | audio_text | multimodal_instruction
 
+# Storage backend — where processed data is written
+# Omit for local storage (default), or set to s3 for remote bucket
+storage:
+  backend: s3           # "local" (default) | "s3"
+
 source:
   type: huggingface   # huggingface | url | local
   path: "org/dataset"
@@ -420,7 +451,7 @@ Available cleaning steps:
 ### Makefile shortcuts
 
 ```bash
-make pipeline-list     # List sources
+make pipeline-list     # List sources (shows storage backend per source)
 make pipeline-fetch    # Dry-run fetch all
 make pipeline-clean    # Dry-run clean all
 make pipeline-run SOURCE=fineweb  # Run pipeline for one source
@@ -473,22 +504,30 @@ ash/
 │   │   ├── trainer.py         # Main training loop
 │   │   └── runner.py          # Training orchestration (local + Modal)
 │   ├── infra/
-│   │   ├── modal_runner.py    # Modal GPU dispatch
+│   │   ├── modal_runner.py    # Modal GPU dispatch (Volume or S3 CloudBucketMount)
 │   │   └── modal_data.py      # Upload data to Modal Volumes
 │   ├── pipeline/
-│   │   ├── source.py          # YAML source loader and validator (with modality)
-│   │   ├── fetch.py           # Fetch from HuggingFace, URL, or local
-│   │   ├── clean.py           # Cleaning step registry and executor
+│   │   ├── source.py          # YAML source loader and validator (with modality + storage)
+│   │   ├── fetch.py           # Fetch from HuggingFace, URL, or local (local or S3 output)
+│   │   ├── clean.py           # Cleaning step registry and executor (local or S3)
+│   │   ├── merge.py           # Merge multiple tokens.bin → train.bin + val.bin
 │   │   └── runner.py          # Pipeline orchestrator
 │   ├── data/
 │   │   ├── tokenizer.py       # tiktoken GPT-2 wrapper
-│   │   └── dataset.py         # Memmap dataset
+│   │   ├── dataset.py         # Memmap dataset
+│   │   └── storage.py         # Storage backend (local / S3) + PipelineFS
 │   └── eval/
 │       ├── cer_battery.py     # CER test suite runner
 │       └── t1-t8 tests        # Individual CER evaluation tests
 ├── data_sources/              # YAML data source definitions (text + multimodal)
 ├── configs/                   # YAML training configs (Ashy-Small + Ash Full)
-├── scripts/                   # Entry points (train, eval, prepare_data, visualize)
+├── scripts/
+│   ├── ready.py               # Prepare data + train by model name
+│   ├── train.py               # Direct training from config
+│   ├── prepare_data.py        # Legacy single-dataset tokenization
+│   ├── pipeline.py            # Data pipeline CLI
+│   ├── eval.py                # Evaluation
+│   └── visualize_cer.py       # CER visualization
 ├── tests/                     # Unit and integration tests
 ├── plans/
 │   └── SOTA.md               # Full architecture plan for Ash at scale

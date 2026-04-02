@@ -43,3 +43,6 @@ cleaning:
         min_snr_db: 10
     - name: normalize_whitespace
     - name: dedup_exact
+
+storage:
+  type: s3

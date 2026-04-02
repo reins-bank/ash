@@ -12,6 +12,8 @@ model:
 
 training:
   data_dir: "data/wikitext"
+  data_sources:
+    - wikipedia
   max_steps: 5000
   warmup_steps: 200
   batch_size: 6

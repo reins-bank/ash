@@ -39,3 +39,6 @@ cleaning:
     - name: tokenize
       params:
         tokenizer: gpt2
+
+storage:
+  type: s3

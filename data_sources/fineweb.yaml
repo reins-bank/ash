@@ -2,6 +2,9 @@ name: fineweb
 version: "1.0"
 description: "Large-scale curated and deduplicated web text from CommonCrawl"
 
+storage:
+  backend: s3
+
 source:
   type: huggingface
   path: "HuggingFaceFW/fineweb"

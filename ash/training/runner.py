@@ -8,6 +8,7 @@ import torch
 from ash.config import ModelConfig, TrainingConfig
 from ash.model.gpt import GPT
 from ash.data.dataset import get_dataloader
+from ash.data.storage import resolve_data_dir
 from ash.training.trainer import Trainer
 from ash.utils.logging import Logger
 
@@ -48,16 +49,17 @@ def run_training(
         print("Compiling model with torch.compile...")
         model = torch.compile(model)
 
-    # Data
+    # Data — resolve storage backend (S3 will fail locally with a clear message)
+    data_dir = resolve_data_dir(train_cfg.storage, train_cfg.data_dir)
     train_loader = get_dataloader(
-        data_dir=train_cfg.data_dir,
+        data_dir=data_dir,
         split="train",
         block_size=train_cfg.block_size,
         batch_size=train_cfg.batch_size,
         vocab_size=model_cfg.vocab_size,
     )
     val_loader = get_dataloader(
-        data_dir=train_cfg.data_dir,
+        data_dir=data_dir,
         split="val",
         block_size=train_cfg.block_size,
         batch_size=train_cfg.batch_size,

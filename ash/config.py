@@ -160,6 +160,20 @@ class ModalConfig:
 
 
 @dataclass
+class StorageConfig:
+    """Data storage backend. Set backend to 's3' for remote bucket storage.
+
+    When backend is 's3', bucket and endpoint are resolved from environment
+    variables (ASH_S3_BUCKET, ASH_S3_ENDPOINT_URL) with YAML fields as
+    optional overrides.  Credentials use AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+    """
+
+    backend: str = "local"       # "local" | "s3"
+    bucket: str = ""             # override ASH_S3_BUCKET env var
+    endpoint_url: str = ""       # override ASH_S3_ENDPOINT_URL env var
+
+
+@dataclass
 class TrainingConfig:
     """Training hyperparameters."""
 
@@ -183,6 +197,7 @@ class TrainingConfig:
     # Data
     dataset: str = "openwebtext"
     data_dir: str = "data/"
+    data_sources: list[str] = field(default_factory=list)
 
     # Logging
     log_interval: int = 10
@@ -203,6 +218,9 @@ class TrainingConfig:
 
     # Modal
     modal: ModalConfig = field(default_factory=ModalConfig)
+
+    # Storage
+    storage: StorageConfig = field(default_factory=StorageConfig)
 
     # Multimodal training stages (empty = text-only training)
     multimodal_stages: list[MultimodalTrainingStage] = field(default_factory=list)

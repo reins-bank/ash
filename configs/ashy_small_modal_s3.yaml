@@ -1,0 +1,44 @@
+# Ashy-Small: Modal GPU training with S3-compatible storage (DO Spaces).
+#
+# Required environment variables:
+#   export AWS_ACCESS_KEY_ID=<your-do-spaces-access-key>
+#   export AWS_SECRET_ACCESS_KEY=<your-do-spaces-secret-key>
+#   export ASH_S3_BUCKET=<your-bucket-name>
+#   export ASH_S3_ENDPOINT_URL=https://<region>.digitaloceanspaces.com
+#
+# One-time setup:
+#   modal setup
+#   modal secret create wandb-secret WANDB_API_KEY=<your-key>
+#
+# No need for `make modal-upload-data` -- data is read directly from the bucket.
+#
+# Bucket structure should mirror data_dir layout:
+#   s3://<bucket>/wikitext/train.bin
+#   s3://<bucket>/wikitext/val.bin
+
+model:
+  cer:
+    enabled: true
+
+training:
+  data_dir: "data/ashy_small"
+  data_sources:
+    - fineweb
+    - wikipedia
+    - arxiv
+    - openwebmath
+    - the_stack_v2
+  warmup_steps: 500
+  batch_size: 6
+  gradient_accumulation_steps: 80
+  eval_interval: 200
+  save_interval: 1000
+  gradient_checkpointing: true
+  compile: false
+  wandb_project: ashy-small
+  wandb_enabled: true
+  modal:
+    enabled: true
+    gpu: "A10G"
+  storage:
+    backend: s3

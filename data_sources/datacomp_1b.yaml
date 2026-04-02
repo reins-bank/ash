@@ -46,3 +46,6 @@ cleaning:
       params:
         min_chars: 10
         max_chars: 1000
+
+storage:
+  type: s3

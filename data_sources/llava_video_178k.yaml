@@ -44,3 +44,6 @@ cleaning:
         min_chars: 20
         max_chars: 4000
     - name: dedup_exact
+
+storage:
+  type: s3

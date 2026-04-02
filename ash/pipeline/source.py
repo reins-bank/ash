@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ash.config import StorageConfig
+
 # Default directory for source YAML definitions, relative to project root.
 DEFAULT_SOURCES_DIR = Path("data_sources")
 
@@ -66,6 +68,7 @@ class DataSource:
     provenance: ProvenanceInfo = field(default_factory=ProvenanceInfo)
     fetch: FetchConfig = field(default_factory=FetchConfig)
     cleaning: CleaningConfig = field(default_factory=CleaningConfig)
+    storage: StorageConfig = field(default_factory=StorageConfig)
     yaml_path: str = ""  # path to the YAML file this was loaded from
 
 
@@ -114,6 +117,9 @@ def load_source(yaml_path: str | Path) -> DataSource:
         steps=steps,
     )
 
+    # Storage config (local vs s3)
+    storage_cfg = _build_dataclass(StorageConfig, raw.get("storage", {}))
+
     return DataSource(
         name=raw.get("name", yaml_path.stem),
         version=str(raw.get("version", "1.0")),
@@ -124,6 +130,7 @@ def load_source(yaml_path: str | Path) -> DataSource:
         provenance=provenance,
         fetch=fetch_cfg,
         cleaning=cleaning_cfg,
+        storage=storage_cfg,
         yaml_path=str(yaml_path),
     )
 

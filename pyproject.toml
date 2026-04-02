@@ -20,6 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
 modal = ["modal>=1.0"]
+s3 = ["boto3"]
 
 [tool.setuptools.packages.find]
 include = ["ash*"]

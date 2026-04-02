@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,7 +19,11 @@ def _save_run_info(call_id: str, train_cfg: TrainingConfig) -> None:
         "gpu": train_cfg.modal.gpu,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "checkpoint_volume": train_cfg.modal.checkpoint_volume,
-        "data_volume": train_cfg.modal.data_volume,
+        "storage_backend": train_cfg.storage.backend,
+        "data_volume": train_cfg.modal.data_volume if train_cfg.storage.backend == "local" else None,
+        "bucket": (train_cfg.storage.bucket or os.environ.get("ASH_S3_BUCKET"))
+        if train_cfg.storage.backend == "s3"
+        else None,
     }
     RUN_INFO_PATH.write_text(json.dumps(info, indent=2) + "\n")
 
@@ -51,12 +56,36 @@ def run_on_modal(
         .add_local_python_source("ash")
     )
 
-    data_vol = modal.Volume.from_name(
-        train_cfg.modal.data_volume, create_if_missing=True
-    )
+    use_s3 = train_cfg.storage.backend == "s3"
+
+    # Data mount: S3 CloudBucketMount or Modal Volume
+    if use_s3:
+        from ash.data.storage import resolve_s3_config
+
+        bucket, endpoint_url, access_key, secret_key = resolve_s3_config(
+            train_cfg.storage
+        )
+        s3_secret = modal.Secret.from_dict({
+            "AWS_ACCESS_KEY_ID": access_key,
+            "AWS_SECRET_ACCESS_KEY": secret_key,
+        })
+        data_mount = modal.CloudBucketMount(
+            bucket_name=bucket,
+            bucket_endpoint_url=endpoint_url,
+            secret=s3_secret,
+            read_only=True,
+        )
+        volumes_dict = {"/data": data_mount}
+    else:
+        data_vol = modal.Volume.from_name(
+            train_cfg.modal.data_volume, create_if_missing=True
+        )
+        volumes_dict = {"/data": data_vol}
+
     ckpt_vol = modal.Volume.from_name(
         train_cfg.modal.checkpoint_volume, create_if_missing=True
     )
+    volumes_dict["/checkpoints"] = ckpt_vol
 
     secrets = []
     if train_cfg.wandb_enabled:
@@ -82,18 +111,14 @@ def run_on_modal(
         _apply_overrides(train_cfg, config_dict["training"])
         train_cfg.block_size = model_cfg.block_size
 
-        # Map local data_dir onto the volume mount point.
-        # The upload (modal_data.py --data-dir data/) mirrors the data/ directory
-        # into the volume, which is mounted at /data. So local "data/wikitext"
-        # becomes "/data/wikitext" on the container.
-        import os
-        local_dir = train_cfg.data_dir.rstrip("/")
-        if local_dir.startswith("data/"):
-            train_cfg.data_dir = "/data/" + local_dir[5:]
-        elif local_dir == "data":
-            train_cfg.data_dir = "/data"
-        else:
-            train_cfg.data_dir = "/data/" + local_dir
+        # Map data_dir onto the /data mount point.
+        # Both CloudBucketMount (S3) and Volume mount at /data.
+        from ash.data.storage import dataset_prefix
+        prefix = dataset_prefix(train_cfg.data_dir)
+        train_cfg.data_dir = f"/data/{prefix}" if prefix else "/data"
+
+        # Override storage backend to local — data is already mounted as a filesystem
+        train_cfg.storage.backend = "local"
 
         # Verify data exists — fail loudly rather than silently training on random tokens
         from pathlib import Path
@@ -103,9 +128,13 @@ def run_on_modal(
                 avail = list(Path("/data").rglob("*.bin"))
                 msg = f"Data not found: {p}"
                 if avail:
-                    msg += f"\nAvailable .bin files on volume: {[str(f) for f in avail]}"
+                    msg += f"\nAvailable .bin files: {[str(f) for f in avail]}"
                 else:
-                    msg += "\nNo .bin files found on volume. Run: make modal-upload-data"
+                    backend = config_dict["training"]["storage"]["backend"]
+                    if backend == "s3":
+                        msg += "\nNo .bin files found. Check your S3 bucket contents."
+                    else:
+                        msg += "\nNo .bin files found on volume. Run: make modal-upload-data"
                 raise FileNotFoundError(msg)
 
         train_cfg.checkpoint_dir = "/checkpoints"
@@ -124,14 +153,18 @@ def run_on_modal(
         image=image,
         gpu=train_cfg.modal.gpu,
         timeout=train_cfg.modal.timeout,
-        volumes={"/data": data_vol, "/checkpoints": ckpt_vol},
+        volumes=volumes_dict,
         secrets=secrets,
         serialized=True,
     )(_train_remote)
 
     gpu = train_cfg.modal.gpu
     timeout_h = train_cfg.modal.timeout / 3600
-    print(f"Dispatching training on Modal (GPU: {gpu}, timeout: {timeout_h:.0f}h)...")
+    if use_s3:
+        bucket = train_cfg.storage.bucket or os.environ.get("ASH_S3_BUCKET", "")
+        print(f"Dispatching training on Modal (GPU: {gpu}, data: s3://{bucket})...")
+    else:
+        print(f"Dispatching training on Modal (GPU: {gpu}, timeout: {timeout_h:.0f}h)...")
 
     with app.run(detach=True):
         fc = train_fn.spawn(config_dict, resume_path)

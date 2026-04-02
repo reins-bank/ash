@@ -27,6 +27,13 @@ training:
   max_steps: 100000
   batch_size: 12
   gradient_accumulation_steps: 40
+  data_dir: "data/ashy_small"
+  data_sources:
+    - fineweb
+    - wikipedia
+    - arxiv
+    - openwebmath
+    - the_stack_v2
   wandb_project: ashy-small
   wandb_enabled: true
   dtype: bfloat16
